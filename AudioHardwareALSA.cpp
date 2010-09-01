@@ -1,6 +1,6 @@
 /* AudioHardwareALSA.cpp
  **
- ** Copyright 2008-2009 Wind River Systems
+ ** Copyright 2008-2010 Wind River Systems
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -117,10 +117,13 @@ AudioHardwareALSA::~AudioHardwareALSA()
 
 status_t AudioHardwareALSA::initCheck()
 {
-    if (mALSADevice && mMixer && mMixer->isValid())
-        return NO_ERROR;
-    else
+    if (!mALSADevice)
         return NO_INIT;
+
+    if (!mMixer || !mMixer->isValid())
+    	LOGW("ALSA Mixer is not valid. AudioFlinger will do software volume control.");
+
+    return NO_ERROR;
 }
 
 status_t AudioHardwareALSA::setVoiceVolume(float volume)
