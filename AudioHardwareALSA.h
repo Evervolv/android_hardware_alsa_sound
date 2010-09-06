@@ -1,6 +1,6 @@
 /* AudioHardwareALSA.h
  **
- ** Copyright 2008-2009, Wind River Systems
+ ** Copyright 2008-2010, Wind River Systems
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -356,9 +356,6 @@ protected:
     acoustic_device_t * mAcousticDevice;
 
     ALSAHandleList      mDeviceList;
-
-private:
-    Mutex               mLock;
 };
 
 // ----------------------------------------------------------------------------

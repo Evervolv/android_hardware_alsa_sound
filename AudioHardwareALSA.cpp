@@ -153,11 +153,12 @@ status_t AudioHardwareALSA::setMode(int mode)
         if (status == NO_ERROR) {
             // take care of mode change.
             for(ALSAHandleList::iterator it = mDeviceList.begin();
-                it != mDeviceList.end(); ++it) {
-                status = mALSADevice->route(&(*it), it->curDev, mode);
-                if (status != NO_ERROR)
-                    break;
-            }
+                it != mDeviceList.end(); ++it)
+                if (it->curDev) {
+                    status = mALSADevice->route(&(*it), it->curDev, mode);
+                    if (status != NO_ERROR)
+                        break;
+                }
         }
     }
 
@@ -171,8 +172,6 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                                     uint32_t *sampleRate,
                                     status_t *status)
 {
-    AutoMutex lock(mLock);
-
     LOGD("openOutputStream called for devices: 0x%08x", devices);
 
     status_t err = BAD_VALUE;
@@ -202,7 +201,6 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 void
 AudioHardwareALSA::closeOutputStream(AudioStreamOut* out)
 {
-    AutoMutex lock(mLock);
     delete out;
 }
 
@@ -214,8 +212,6 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                                    status_t *status,
                                    AudioSystem::audio_in_acoustics acoustics)
 {
-    AutoMutex lock(mLock);
-
     status_t err = BAD_VALUE;
     AudioStreamInALSA *in = 0;
 
@@ -242,7 +238,6 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 void
 AudioHardwareALSA::closeInputStream(AudioStreamIn* in)
 {
-    AutoMutex lock(mLock);
     delete in;
 }
 
