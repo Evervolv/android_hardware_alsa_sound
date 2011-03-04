@@ -86,6 +86,7 @@ endif
   	libasound \
   	liblog
 
+  LOCAL_MODULE_TAGS := optional
   LOCAL_MODULE:= alsa.default
 
   include $(BUILD_SHARED_LIBRARY)
@@ -106,6 +107,7 @@ endif
 
   LOCAL_SHARED_LIBRARIES := liblog
 
+  LOCAL_MODULE_TAGS := optional
   LOCAL_MODULE:= acoustics.default
 
   include $(BUILD_SHARED_LIBRARY)
