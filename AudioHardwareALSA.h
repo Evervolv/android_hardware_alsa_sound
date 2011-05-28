@@ -21,7 +21,10 @@
 #include <utils/List.h>
 #include <hardware_legacy/AudioHardwareBase.h>
 
-#include <alsa/asoundlib.h>
+extern "C" {
+   #include <sound/asound.h>
+   #include "alsa_audio.h"
+}
 
 #include <hardware/hardware.h>
 
@@ -43,7 +46,7 @@ struct alsa_handle_t {
     uint32_t            devices;
     uint32_t            curDev;
     int                 curMode;
-    snd_pcm_t *         handle;
+    struct pcm *        handle;
     snd_pcm_format_t    format;
     uint32_t            channels;
     uint32_t            sampleRate;
@@ -94,7 +97,7 @@ public:
     ALSAMixer();
     virtual                ~ALSAMixer();
 
-    bool                    isValid() { return !!mMixer[SND_PCM_STREAM_PLAYBACK]; }
+    bool                    isValid() { return 1;}
     status_t                setMasterVolume(float volume);
     status_t                setMasterGain(float gain);
 
@@ -106,8 +109,6 @@ public:
     status_t                setPlaybackMuteState(uint32_t device, bool state);
     status_t                getPlaybackMuteState(uint32_t device, bool *state);
 
-private:
-    snd_mixer_t *           mMixer[SND_PCM_STREAM_LAST+1];
 };
 
 class ALSAControl
@@ -122,7 +123,7 @@ public:
     status_t                set(const char *name, const char *);
 
 private:
-    snd_ctl_t *             mHandle;
+    struct mixer*             mHandle;
 };
 
 class ALSAStreamOps
@@ -312,7 +313,7 @@ public:
 
     // Returns audio input buffer size according to parameters passed or 0 if one of the
     // parameters is not supported
-    //virtual size_t    getInputBufferSize(uint32_t sampleRate, int format, int channels);
+    virtual size_t    getInputBufferSize(uint32_t sampleRate, int format, int channels);
 
     /** This method creates and opens the audio hardware output stream */
     virtual AudioStreamOut* openOutputStream(

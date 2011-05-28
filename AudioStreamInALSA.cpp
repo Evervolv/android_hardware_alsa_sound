@@ -24,6 +24,7 @@
 #include <dlfcn.h>
 
 #define LOG_TAG "AudioHardwareALSA"
+#define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -55,13 +56,14 @@ AudioStreamInALSA::~AudioStreamInALSA()
 
 status_t AudioStreamInALSA::setGain(float gain)
 {
-    return mixer() ? mixer()->setMasterGain(gain) : (status_t)NO_INIT;
+    return 0; //mixer() ? mixer()->setMasterGain(gain) : (status_t)NO_INIT;
 }
 
 ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 {
     AutoMutex lock(mLock);
 
+    LOGV("read:: buffer %p, bytes %d", buffer, bytes);
     if (!mPowerLock) {
         acquire_wake_lock (PARTIAL_WAKE_LOCK, "AudioInLock");
         mPowerLock = true;
@@ -74,25 +76,35 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     if (aDev && aDev->read)
         return aDev->read(aDev, buffer, bytes);
 
-    snd_pcm_sframes_t n, frames = snd_pcm_bytes_to_frames(mHandle->handle, bytes);
+    int n;
     status_t          err;
+    size_t            read = 0;
 
+    int read_pending = bytes;
     do {
-        n = snd_pcm_readi(mHandle->handle, buffer, frames);
-        if (n < frames) {
-            if (mHandle->handle) {
-                if (n < 0) {
-                    n = snd_pcm_recover(mHandle->handle, n, 0);
+        if (read_pending < mHandle->handle->period_size) {
+            read_pending = mHandle->handle->period_size;
+        }
 
-                    if (aDev && aDev->recover) aDev->recover(aDev, n);
-                } else
-                    n = snd_pcm_prepare(mHandle->handle);
-            }
+        n = pcm_read(mHandle->handle, buffer,
+		mHandle->handle->period_size);
+        LOGV("pcm_read() returned n = %d", n);
+        if (n && n != -EAGAIN) {
+            //Recovery part of pcm_read. TODO:split recovery.
             return static_cast<ssize_t>(n);
         }
-    } while (n == -EAGAIN);
+        else if (n < 0) {
+            // Recovery is part of pcm_write. TODO split is later.
+            return static_cast<ssize_t>(n);
+        }
+        else {
+            read += static_cast<ssize_t>((mHandle->handle->period_size));
+            read_pending -= mHandle->handle->period_size;
+        }
 
-    return static_cast<ssize_t>(snd_pcm_frames_to_bytes(mHandle->handle, n));
+    } while (mHandle->handle && read < bytes);
+
+    return read;
 }
 
 status_t AudioStreamInALSA::dump(int fd, const Vector<String16>& args)
@@ -117,7 +129,7 @@ status_t AudioStreamInALSA::open(int mode)
 status_t AudioStreamInALSA::close()
 {
     AutoMutex lock(mLock);
-
+    LOGV("close");
     acoustic_device_t *aDev = acoustics();
 
     if (mHandle && aDev) aDev->cleanup(aDev);
@@ -136,6 +148,7 @@ status_t AudioStreamInALSA::standby()
 {
     AutoMutex lock(mLock);
 
+    LOGV("standby");
     if (mPowerLock) {
         release_wake_lock ("AudioInLock");
         mPowerLock = false;

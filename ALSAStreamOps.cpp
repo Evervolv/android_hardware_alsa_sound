@@ -23,7 +23,8 @@
 #include <unistd.h>
 #include <dlfcn.h>
 
-#define LOG_TAG "AudioHardwareALSA"
+#define LOG_TAG "ALSAStreamOps"
+#define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -123,11 +124,11 @@ status_t ALSAStreamOps::set(int      *format,
                 break;
 
             case AudioSystem::PCM_16_BIT:
-                iformat = SND_PCM_FORMAT_S16_LE;
+                iformat = SNDRV_PCM_FORMAT_S16_LE;
                 break;
 
             case AudioSystem::PCM_8_BIT:
-                iformat = SND_PCM_FORMAT_S8;
+                iformat = SNDRV_PCM_FORMAT_S8;
                 break;
 
             default:
@@ -140,10 +141,10 @@ status_t ALSAStreamOps::set(int      *format,
 
         switch(iformat) {
             default:
-            case SND_PCM_FORMAT_S16_LE:
+            case SNDRV_PCM_FORMAT_S16_LE:
                 *format = AudioSystem::PCM_16_BIT;
                 break;
-            case SND_PCM_FORMAT_S8:
+            case SNDRV_PCM_FORMAT_S8:
                 *format = AudioSystem::PCM_8_BIT;
                 break;
         }
@@ -196,20 +197,8 @@ uint32_t ALSAStreamOps::sampleRate() const
 //
 size_t ALSAStreamOps::bufferSize() const
 {
-    snd_pcm_uframes_t bufferSize = mHandle->bufferSize;
-    snd_pcm_uframes_t periodSize;
-
-    snd_pcm_get_params(mHandle->handle, &bufferSize, &periodSize);
-
-    size_t bytes = static_cast<size_t>(snd_pcm_frames_to_bytes(mHandle->handle, bufferSize));
-
-    // Not sure when this happened, but unfortunately it now
-    // appears that the bufferSize must be reported as a
-    // power of 2. This might be for OSS compatibility.
-    for (size_t i = 1; (bytes & ~i) != 0; i<<=1)
-        bytes &= ~i;
-
-    return bytes;
+    LOGV("bufferSize() returns %d", mHandle->bufferSize);
+    return mHandle->bufferSize;
 }
 
 int ALSAStreamOps::format() const
@@ -219,7 +208,7 @@ int ALSAStreamOps::format() const
 
     snd_pcm_format_t ALSAFormat = mHandle->format;
 
-    pcmFormatBitWidth = snd_pcm_format_physical_width(ALSAFormat);
+    pcmFormatBitWidth = 16; // snd_pcm_format_physical_width(ALSAFormat); TODO: change runtime detection
     switch(pcmFormatBitWidth) {
         case 8:
             audioSystemFormat = AudioSystem::PCM_8_BIT;
@@ -271,6 +260,7 @@ uint32_t ALSAStreamOps::channels() const
 
 void ALSAStreamOps::close()
 {
+    LOGV("close");
     mParent->mALSADevice->close(mHandle);
 }
 
@@ -286,6 +276,7 @@ void ALSAStreamOps::close()
 //
 status_t ALSAStreamOps::open(int mode)
 {
+    LOGV("open");
     return mParent->mALSADevice->open(mHandle, mHandle->curDev, mode);
 }
 

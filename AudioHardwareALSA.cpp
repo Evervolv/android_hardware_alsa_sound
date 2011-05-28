@@ -24,6 +24,7 @@
 #include <dlfcn.h>
 
 #define LOG_TAG "AudioHardwareALSA"
+#define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -75,9 +76,6 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),
     mAcousticDevice(0)
 {
-    snd_lib_error_set_handler(&ALSAErrorHandler);
-    mMixer = new ALSAMixer;
-
     hw_module_t *module;
     int err = hw_get_module(ALSA_HARDWARE_MODULE_ID,
             (hw_module_t const**)&module);
@@ -108,7 +106,6 @@ AudioHardwareALSA::AudioHardwareALSA() :
 
 AudioHardwareALSA::~AudioHardwareALSA()
 {
-    if (mMixer) delete mMixer;
     if (mALSADevice)
         mALSADevice->common.close(&mALSADevice->common);
     if (mAcousticDevice)
@@ -120,30 +117,18 @@ status_t AudioHardwareALSA::initCheck()
     if (!mALSADevice)
         return NO_INIT;
 
-    if (!mMixer || !mMixer->isValid())
-        LOGW("ALSA Mixer is not valid. AudioFlinger will do software volume control.");
-
     return NO_ERROR;
 }
 
 status_t AudioHardwareALSA::setVoiceVolume(float volume)
 {
     // The voice volume is used by the VOICE_CALL audio stream.
-    if (mOutStream) {
-        // the mOutStream will set the volume of current device
-        return mOutStream->setVolume(volume, volume);
-    } else {
-        // return error
-        return INVALID_OPERATION;
-    }
+    return INVALID_OPERATION;
 }
 
 status_t AudioHardwareALSA::setMasterVolume(float volume)
 {
-    if (mMixer)
-        return mMixer->setMasterVolume(volume);
-    else
-        return INVALID_OPERATION;
+    return INVALID_OPERATION;
 }
 
 status_t AudioHardwareALSA::setMode(int mode)
@@ -218,6 +203,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     status_t err = BAD_VALUE;
     AudioStreamInALSA *in = 0;
 
+    LOGV("openInputStream: devices 0x%x channels %d sampleRate %d", devices, *channels, *sampleRate);
     if (devices & (devices - 1)) {
         if (status) *status = err;
         return in;
@@ -227,6 +213,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     for(ALSAHandleList::iterator it = mDeviceList.begin();
         it != mDeviceList.end(); ++it)
         if (it->devices & devices) {
+            if(sampleRate) {
+                it->sampleRate = *sampleRate;
+            }
+            if(channels) {
+                it->channels = AudioSystem::popCount(*channels);
+            }
             err = mALSADevice->open(&(*it), devices, mode());
             if (err) break;
             in = new AudioStreamInALSA(this, &(*it), acoustics);
@@ -246,23 +238,27 @@ AudioHardwareALSA::closeInputStream(AudioStreamIn* in)
 
 status_t AudioHardwareALSA::setMicMute(bool state)
 {
-    if (mMixer)
-        return mMixer->setCaptureMuteState(AudioSystem::DEVICE_OUT_EARPIECE, state);
-
     return NO_INIT;
 }
 
 status_t AudioHardwareALSA::getMicMute(bool *state)
 {
-    if (mMixer)
-        return mMixer->getCaptureMuteState(AudioSystem::DEVICE_OUT_EARPIECE, state);
-
     return NO_ERROR;
 }
 
 status_t AudioHardwareALSA::dump(int fd, const Vector<String16>& args)
 {
     return NO_ERROR;
+}
+
+size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
+{
+    if (format != AudioSystem::PCM_16_BIT) {
+        LOGW("getInputBufferSize bad format: %d", format);
+        return 0;
+    }
+
+    return 4096;
 }
 
 }       // namespace android

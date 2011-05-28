@@ -12,22 +12,22 @@ ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
   LOCAL_ARM_MODE := arm
   LOCAL_CFLAGS := -D_POSIX_SOURCE
 
-  LOCAL_C_INCLUDES += external/alsa-lib/include
+  LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+  LOCAL_C_INCLUDES += $(LOCAL_PATH)/../msm7k/libalsa-intf/
 
   LOCAL_SRC_FILES := \
 	AudioHardwareALSA.cpp \
 	AudioStreamOutALSA.cpp \
 	AudioStreamInALSA.cpp \
-	ALSAStreamOps.cpp \
-	ALSAMixer.cpp \
-	ALSAControl.cpp
+	ALSAStreamOps.cpp
 
   LOCAL_MODULE := libaudio
 
   LOCAL_STATIC_LIBRARIES += libaudiointerface
 
   LOCAL_SHARED_LIBRARIES := \
-    libasound \
+    libalsa-intf \
     libcutils \
     libutils \
     libmedia \
@@ -78,15 +78,17 @@ ifneq ($(ALSA_DEFAULT_SAMPLE_RATE),)
     LOCAL_CFLAGS += -DALSA_DEFAULT_SAMPLE_RATE=$(ALSA_DEFAULT_SAMPLE_RATE)
 endif
 
-  LOCAL_C_INCLUDES += external/alsa-lib/include
+  LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+  LOCAL_C_INCLUDES += $(LOCAL_PATH)/../msm7k/libalsa-intf/
 
-  LOCAL_SRC_FILES:= alsa_default.cpp
+  LOCAL_SRC_FILES:= alsa_default.cpp \
+	ALSAControl.cpp
 
   LOCAL_SHARED_LIBRARIES := \
-  	libasound \
+    libalsa-intf \
   	liblog
 
-  LOCAL_MODULE_TAGS := optional
   LOCAL_MODULE:= alsa.default
 
   include $(BUILD_SHARED_LIBRARY)
@@ -101,13 +103,14 @@ endif
 
   LOCAL_CFLAGS := -D_POSIX_SOURCE -Wno-multichar
 
-  LOCAL_C_INCLUDES += external/alsa-lib/include
+  LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+  LOCAL_C_INCLUDES += $(LOCAL_PATH)/../msm7k/libalsa-intf/
 
   LOCAL_SRC_FILES:= acoustics_default.cpp
 
   LOCAL_SHARED_LIBRARIES := liblog
 
-  LOCAL_MODULE_TAGS := optional
   LOCAL_MODULE:= acoustics.default
 
   include $(BUILD_SHARED_LIBRARY)

@@ -24,6 +24,7 @@
 #include <dlfcn.h>
 
 #define LOG_TAG "ALSAControl"
+#define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -38,179 +39,67 @@ namespace android
 
 ALSAControl::ALSAControl(const char *device)
 {
-    snd_ctl_open(&mHandle, device, 0);
+    LOGV("ALSAControl: ctor device %s", device);
+    mHandle = mixer_open(device);
+    LOGV("ALSAControl: ctor mixer %p", mHandle);
 }
 
 ALSAControl::~ALSAControl()
 {
-    if (mHandle) snd_ctl_close(mHandle);
+    if (mHandle) mixer_close(mHandle);
 }
 
 status_t ALSAControl::get(const char *name, unsigned int &value, int index)
 {
+    struct mixer_ctl *ctl;
+
     if (!mHandle) {
         LOGE("Control not initialized");
-        return NO_INIT;
+        //return NO_INIT;
+        mHandle = mixer_open("/dev/snd/controlC0");
+        if (!mHandle) {
+            LOGE("Could not open mixer");
+        }
     }
 
-    snd_ctl_elem_id_t *id;
-    snd_ctl_elem_info_t *info;
-    snd_ctl_elem_value_t *control;
-
-    snd_ctl_elem_id_alloca(&id);
-    snd_ctl_elem_info_alloca(&info);
-    snd_ctl_elem_value_alloca(&control);
-
-    snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
-    snd_ctl_elem_id_set_name(id, name);
-    snd_ctl_elem_info_set_id(info, id);
-
-    int ret = snd_ctl_elem_info(mHandle, info);
-    if (ret < 0) {
-        LOGE("Control '%s' cannot get element info: %d", name, ret);
+    ctl =  mixer_get_control(mHandle, name, index);
+    if (!ctl)
         return BAD_VALUE;
-    }
 
-    int count = snd_ctl_elem_info_get_count(info);
-    if (index >= count) {
-        LOGE("Control '%s' index is out of range (%d >= %d)", name, index, count);
-        return BAD_VALUE;
-    }
-
-    snd_ctl_elem_info_get_id(info, id);
-    snd_ctl_elem_value_set_id(control, id);
-
-    ret = snd_ctl_elem_read(mHandle, control);
-    if (ret < 0) {
-        LOGE("Control '%s' cannot read element value: %d", name, ret);
-        return BAD_VALUE;
-    }
-
-    snd_ctl_elem_type_t type = snd_ctl_elem_info_get_type(info);
-    switch (type) {
-        case SND_CTL_ELEM_TYPE_BOOLEAN:
-            value = snd_ctl_elem_value_get_boolean(control, index);
-            break;
-        case SND_CTL_ELEM_TYPE_INTEGER:
-            value = snd_ctl_elem_value_get_integer(control, index);
-            break;
-        case SND_CTL_ELEM_TYPE_INTEGER64:
-            value = snd_ctl_elem_value_get_integer64(control, index);
-            break;
-        case SND_CTL_ELEM_TYPE_ENUMERATED:
-            value = snd_ctl_elem_value_get_enumerated(control, index);
-            break;
-        case SND_CTL_ELEM_TYPE_BYTES:
-            value = snd_ctl_elem_value_get_byte(control, index);
-            break;
-        default:
-            return BAD_VALUE;
-    }
-
+    mixer_ctl_get(ctl, &value);
     return NO_ERROR;
 }
 
 status_t ALSAControl::set(const char *name, unsigned int value, int index)
 {
+    struct mixer_ctl *ctl;
+    int ret = 0;
+    LOGV("set:: name %s value %d index %d", name, value, index);
     if (!mHandle) {
         LOGE("Control not initialized");
         return NO_INIT;
     }
 
-    snd_ctl_elem_id_t *id;
-    snd_ctl_elem_info_t *info;
-
-    snd_ctl_elem_id_alloca(&id);
-    snd_ctl_elem_info_alloca(&info);
-
-    snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
-    snd_ctl_elem_id_set_name(id, name);
-    snd_ctl_elem_info_set_id(info, id);
-
-    int ret = snd_ctl_elem_info(mHandle, info);
-    if (ret < 0) {
-        LOGE("Control '%s' cannot get element info: %d", name, ret);
-        return BAD_VALUE;
-    }
-
-    int count = snd_ctl_elem_info_get_count(info);
-    if (index >= count) {
-        LOGE("Control '%s' index is out of range (%d >= %d)", name, index, count);
-        return BAD_VALUE;
-    }
-
-    if (index == -1)
-        index = 0; // Range over all of them
-    else
-        count = index + 1; // Just do the one specified
-
-    snd_ctl_elem_type_t type = snd_ctl_elem_info_get_type(info);
-
-    snd_ctl_elem_value_t *control;
-    snd_ctl_elem_value_alloca(&control);
-
-    snd_ctl_elem_info_get_id(info, id);
-    snd_ctl_elem_value_set_id(control, id);
-
-    for (int i = index; i < count; i++)
-        switch (type) {
-            case SND_CTL_ELEM_TYPE_BOOLEAN:
-                snd_ctl_elem_value_set_boolean(control, i, value);
-                break;
-            case SND_CTL_ELEM_TYPE_INTEGER:
-                snd_ctl_elem_value_set_integer(control, i, value);
-                break;
-            case SND_CTL_ELEM_TYPE_INTEGER64:
-                snd_ctl_elem_value_set_integer64(control, i, value);
-                break;
-            case SND_CTL_ELEM_TYPE_ENUMERATED:
-                snd_ctl_elem_value_set_enumerated(control, i, value);
-                break;
-            case SND_CTL_ELEM_TYPE_BYTES:
-                snd_ctl_elem_value_set_byte(control, i, value);
-                break;
-            default:
-                break;
-        }
-
-    ret = snd_ctl_elem_write(mHandle, control);
+    // ToDo: Do we need to send index here? Right now it works with 0
+    ctl = mixer_get_control(mHandle, name, 0);
+    ret = mixer_ctl_set(ctl, value);
     return (ret < 0) ? BAD_VALUE : NO_ERROR;
 }
 
 status_t ALSAControl::set(const char *name, const char *value)
 {
+    struct mixer_ctl *ctl;
+    int ret = 0;
+    LOGV("set:: name %s value %s", name, value);
+
     if (!mHandle) {
         LOGE("Control not initialized");
         return NO_INIT;
     }
 
-    snd_ctl_elem_id_t *id;
-    snd_ctl_elem_info_t *info;
-
-    snd_ctl_elem_id_alloca(&id);
-    snd_ctl_elem_info_alloca(&info);
-
-    snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
-    snd_ctl_elem_id_set_name(id, name);
-    snd_ctl_elem_info_set_id(info, id);
-
-    int ret = snd_ctl_elem_info(mHandle, info);
-    if (ret < 0) {
-        LOGE("Control '%s' cannot get element info: %d", name, ret);
-        return BAD_VALUE;
-    }
-
-    int items = snd_ctl_elem_info_get_items(info);
-    for (int i = 0; i < items; i++) {
-        snd_ctl_elem_info_set_item(info, i);
-        ret = snd_ctl_elem_info(mHandle, info);
-        if (ret < 0) continue;
-        if (strcmp(value, snd_ctl_elem_info_get_item_name(info)) == 0)
-            return set(name, i, -1);
-    }
-
-    LOGE("Control '%s' has no enumerated value of '%s'", name, value);
-
+    ctl = mixer_get_control(mHandle, name, 0);
+    ret = mixer_ctl_select(ctl, value);
+    return (ret < 0) ? BAD_VALUE : NO_ERROR;
     return BAD_VALUE;
 }
 

@@ -24,6 +24,7 @@
 #include <dlfcn.h>
 
 #define LOG_TAG "AudioHardwareALSA"
+#define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -65,13 +66,14 @@ uint32_t AudioStreamOutALSA::channels() const
 
 status_t AudioStreamOutALSA::setVolume(float left, float right)
 {
-    return mixer()->setVolume (mHandle->curDev, left, right);
+    return INVALID_OPERATION;//mixer()->setVolume (mHandle->curDev, left, right);
 }
 
 ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 {
     AutoMutex lock(mLock);
 
+    LOGV("write:: buffer %p, bytes %d", buffer, bytes);
     if (!mPowerLock) {
         acquire_wake_lock (PARTIAL_WAKE_LOCK, "AudioOutLock");
         mPowerLock = true;
@@ -88,10 +90,23 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     size_t            sent = 0;
     status_t          err;
 
+    int write_pending = bytes;
+
+    if(mHandle->handle == NULL) {
+        mHandle->module->open(mHandle, mHandle->curDev, mHandle->curMode);
+        if(mHandle->handle == NULL) {
+            LOGE("write:: device open failed");
+            return 0;
+        }
+    }
+
     do {
-        n = snd_pcm_writei(mHandle->handle,
-                           (char *)buffer + sent,
-                           snd_pcm_bytes_to_frames(mHandle->handle, bytes - sent));
+        if (write_pending < mHandle->handle->period_size) {
+            write_pending = mHandle->handle->period_size;
+        }
+        n = pcm_write(mHandle->handle,
+                     (char *)buffer + sent,
+                      mHandle->handle->period_size);
         if (n == -EBADFD) {
             // Somehow the stream is in a bad state. The driver probably
             // has a bug and snd_pcm_recover() doesn't seem to handle this.
@@ -100,19 +115,13 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             if (aDev && aDev->recover) aDev->recover(aDev, n);
         }
         else if (n < 0) {
-            if (mHandle->handle) {
-                // snd_pcm_recover() will return 0 if successful in recovering from
-                // an error, or -errno if the error was unrecoverable.
-                n = snd_pcm_recover(mHandle->handle, n, 1);
-
-                if (aDev && aDev->recover) aDev->recover(aDev, n);
-
-                if (n) return static_cast<ssize_t>(n);
-            }
+            // Recovery is part of pcm_write. TODO split is later.
+            return static_cast<ssize_t>(n);
         }
         else {
             mFrameCount += n;
-            sent += static_cast<ssize_t>(snd_pcm_frames_to_bytes(mHandle->handle, n));
+            sent += static_cast<ssize_t>((mHandle->handle->period_size));
+            write_pending -= mHandle->handle->period_size;
         }
 
     } while (mHandle->handle && sent < bytes);
@@ -136,7 +145,7 @@ status_t AudioStreamOutALSA::close()
 {
     AutoMutex lock(mLock);
 
-    snd_pcm_drain (mHandle->handle);
+    LOGV("close");
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -151,7 +160,7 @@ status_t AudioStreamOutALSA::standby()
 {
     AutoMutex lock(mLock);
 
-    snd_pcm_drain (mHandle->handle);
+    LOGV("standby");
 
     if (mPowerLock) {
         release_wake_lock ("AudioOutLock");

@@ -16,6 +16,7 @@
  */
 
 #define LOG_TAG "ALSAModule"
+#define LOG_NDEBUG 0
 #include <utils/Log.h>
 
 #include "AudioHardwareALSA.h"
@@ -29,9 +30,25 @@
     if (strlen(x) + strlen(y) < ALSA_NAME_MAX) \
         strcat(x, y);
 
+#define MM_DEFAULT_DEVICE    "hw:0,0"
+#define BLUETOOTH_SCO_DEVICE "hw:0,0"
+#define FM_TRANSMIT_DEVICE   "hw:0,0"
+#define FM_CAPTURE_DEVICE    "hw:0,1"
+#define MM_LP_DEVICE         "hw:0,6"
+#define HDMI_DEVICE          "hw:0,7"
+
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
 #endif
+
+#ifndef MM_LP_SAMPLE_RATE
+//not used for now
+#define MM_LP_SAMPLE_RATE 44100        // in Hz
+#endif
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+static bool fm_enable = false;
+static bool mActive = false;
 
 namespace android
 {
@@ -79,6 +96,9 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->route = s_route;
 
     *device = &dev->common;
+
+    LOGV("ALSA module opened");
+
     return 0;
 }
 
@@ -97,33 +117,114 @@ static const char *devicePrefix[SND_PCM_STREAM_LAST + 1] = {
         /* SND_PCM_STREAM_CAPTURE  : */"AndroidCapture",
 };
 
-static alsa_handle_t _defaultsOut = {
-    module      : 0,
-    devices     : AudioSystem::DEVICE_OUT_ALL,
-    curDev      : 0,
-    curMode     : 0,
-    handle      : 0,
-    format      : SND_PCM_FORMAT_S16_LE, // AudioSystem::PCM_16_BIT
-    channels    : 2,
-    sampleRate  : DEFAULT_SAMPLE_RATE,
-    latency     : 200000, // Desired Delay in usec
-    bufferSize  : DEFAULT_SAMPLE_RATE / 5, // Desired Number of samples
-    modPrivate  : 0,
+static void setAlsaControls(alsa_handle_t *handle, uint32_t devices, int mode);
+
+#define DEVICE_OUT_SCO      (\
+        AudioSystem::DEVICE_OUT_BLUETOOTH_SCO |\
+        AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET |\
+        AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)
+
+#define DEVICE_OUT_HDMI        (\
+        AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+
+#define DEVICE_OUT_DEFAULT   (\
+        AudioSystem::DEVICE_OUT_ALL &\
+        ~DEVICE_OUT_SCO &\
+        ~DEVICE_OUT_HDMI)
+
+#define DEVICE_IN_SCO        (\
+        AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)
+
+
+#define DEVICE_IN_DEFAULT    (\
+        AudioSystem::DEVICE_IN_ALL &\
+        ~DEVICE_IN_SCO)
+
+static alsa_handle_t _defaults[] = {
+/*
+    Desriptions and expectations for how this module interprets
+    the fields of the alsa_handle_t struct
+
+        module      : pointer to a alsa_device_t struct
+        devices     : mapping Android devices to Front end devices
+        curDev      : current Android device used by this handle
+        curMode     : current Android mode used by this handle
+        handle      : pointer to a snd_pcm_t ALSA handle
+        format      : bit, endianess according to ALSA definitions
+        channels    : Integer number of channels
+        sampleRate  : Desired sample rate in Hz
+        latency     : Desired Delay in usec for the ALSA buffer
+        bufferSize  : Desired Number of samples for the ALSA buffer
+        mmap        : true (1) to use mmap, false (0) to use standard writei
+        modPrivate  : pointer to the function specific to this handle
+*/
+    {
+        module      : 0,
+        devices     : DEVICE_OUT_SCO,
+        curDev      : 0,
+        curMode     : 0,
+        handle      : 0,
+        format      : SNDRV_PCM_FORMAT_S16_LE,
+        channels    : 2,
+        sampleRate  : DEFAULT_SAMPLE_RATE,
+        latency     : 200000,
+        bufferSize  : DEFAULT_SAMPLE_RATE / 5,
+        modPrivate  : (void *)&setAlsaControls,
+    },
+    {
+        module      : 0,
+        devices     : DEVICE_OUT_HDMI,
+        curDev      : 0,
+        curMode     : 0,
+        handle      : 0,
+        format      : SNDRV_PCM_FORMAT_S16_LE,
+        channels    : 2,
+        sampleRate  : DEFAULT_SAMPLE_RATE,
+        latency     : 200000,
+        bufferSize  : DEFAULT_SAMPLE_RATE / 5,
+        modPrivate  : (void *)&setAlsaControls,
+    },
+    {
+        module      : 0,
+        devices     : DEVICE_OUT_DEFAULT,
+        curDev      : 0,
+        curMode     : 0,
+        handle      : 0,
+        format      : SNDRV_PCM_FORMAT_S16_LE,
+        channels    : 2,
+        sampleRate  : DEFAULT_SAMPLE_RATE,
+        latency     : 85333,
+        bufferSize  : 4096,
+        modPrivate  : (void *)&setAlsaControls,
+    },
+    {
+        module      : 0,
+        devices     : DEVICE_IN_SCO,
+        curDev      : 0,
+        curMode     : 0,
+        handle      : 0,
+        format      : SNDRV_PCM_FORMAT_S16_LE,
+        channels    : 1,
+        sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
+        latency     : 250000,
+        bufferSize  : 2048,
+        modPrivate  : (void *)&setAlsaControls,
+    },
+    {
+        module      : 0,
+        devices     : DEVICE_IN_DEFAULT,
+        curDev      : 0,
+        curMode     : 0,
+        handle      : 0,
+        format      : SNDRV_PCM_FORMAT_S16_LE,
+        channels    : 1,
+        sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
+        latency     : 250000,
+        bufferSize  : 4096,
+        modPrivate  : (void *)&setAlsaControls,
+    },
 };
 
-static alsa_handle_t _defaultsIn = {
-    module      : 0,
-    devices     : AudioSystem::DEVICE_IN_ALL,
-    curDev      : 0,
-    curMode     : 0,
-    handle      : 0,
-    format      : SND_PCM_FORMAT_S16_LE, // AudioSystem::PCM_16_BIT
-    channels    : 1,
-    sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
-    latency     : 250000, // Desired Delay in usec
-    bufferSize  : 2048, // Desired Number of samples
-    modPrivate  : 0,
-};
 
 struct device_suffix_t {
     const AudioSystem::audio_devices device;
@@ -145,235 +246,129 @@ static const int deviceSuffixLen = (sizeof(deviceSuffix)
 
 // ----------------------------------------------------------------------------
 
-snd_pcm_stream_t direction(alsa_handle_t *handle)
+const char *deviceName(alsa_handle_t *handle, uint32_t device, int mode)
 {
+    // ToDo: To decide based on actual device
+    return MM_DEFAULT_DEVICE;
+}
+
+enum snd_pcm_stream_t direction(alsa_handle_t *handle)
+{
+    LOGV("direction: handle->devices 0x%08x", handle->devices);
     return (handle->devices & AudioSystem::DEVICE_OUT_ALL) ? SND_PCM_STREAM_PLAYBACK
             : SND_PCM_STREAM_CAPTURE;
 }
 
-const char *deviceName(alsa_handle_t *handle, uint32_t device, int mode)
-{
-    static char devString[ALSA_NAME_MAX];
-    int hasDevExt = 0;
-
-    strcpy(devString, devicePrefix[direction(handle)]);
-
-    for (int dev = 0; device && dev < deviceSuffixLen; dev++)
-        if (device & deviceSuffix[dev].device) {
-            ALSA_STRCAT (devString, deviceSuffix[dev].suffix);
-            device &= ~deviceSuffix[dev].device;
-            hasDevExt = 1;
-        }
-
-    if (hasDevExt) switch (mode) {
-    case AudioSystem::MODE_NORMAL:
-        ALSA_STRCAT (devString, "_normal")
-        ;
-        break;
-    case AudioSystem::MODE_RINGTONE:
-        ALSA_STRCAT (devString, "_ringtone")
-        ;
-        break;
-    case AudioSystem::MODE_IN_CALL:
-        ALSA_STRCAT (devString, "_incall")
-        ;
-        break;
-    };
-
-    return devString;
-}
 
 const char *streamName(alsa_handle_t *handle)
 {
-    return snd_pcm_stream_name(direction(handle));
+    return direction(handle)? "Playback" : "Capture";
 }
 
 status_t setHardwareParams(alsa_handle_t *handle)
 {
-    snd_pcm_hw_params_t *hardwareParams;
-    status_t err;
+    struct snd_pcm_hw_params *params;
+    status_t err = -1;
 
-    snd_pcm_uframes_t bufferSize = handle->bufferSize;
+    unsigned long periodSize, bufferSize, reqBuffSize;
+    unsigned int periodTime, bufferTime;
     unsigned int requestedRate = handle->sampleRate;
-    unsigned int latency = handle->latency;
+    int numPeriods = 0;
+    int status = 0;
 
     // snd_pcm_format_description() and snd_pcm_format_name() do not perform
     // proper bounds checking.
     bool validFormat = (static_cast<int> (handle->format)
-            > SND_PCM_FORMAT_UNKNOWN) && (static_cast<int> (handle->format)
-            <= SND_PCM_FORMAT_LAST);
-    const char *formatDesc = validFormat ? snd_pcm_format_description(
-            handle->format) : "Invalid Format";
-    const char *formatName = validFormat ? snd_pcm_format_name(handle->format)
+            <= SNDRV_PCM_FORMAT_LAST);
+    const char *formatDesc = validFormat ? "Signed 16 bit Little Endian"
+            : "Invalid Format";
+    const char *formatName = validFormat ? "SND_PCM_FORMAT_S16_LE"
             : "UNKNOWN";
 
-    if (snd_pcm_hw_params_malloc(&hardwareParams) < 0) {
+    // device name will only return LP device hw06 if the property is set
+    // or if the system is explicitly opening and routing to OMAP4_OUT_LP
+    const char* device = deviceName(handle,
+                                    handle->devices,
+                                    AudioSystem::MODE_NORMAL);
+
+    params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
+    if (!params) {
         LOG_ALWAYS_FATAL("Failed to allocate ALSA hardware parameters!");
         return NO_INIT;
     }
 
-    err = snd_pcm_hw_params_any(handle->handle, hardwareParams);
-    if (err < 0) {
-        LOGE("Unable to configure hardware: %s", snd_strerror(err));
-        goto done;
-    }
-
-    // Set the interleaved read and write format.
-    err = snd_pcm_hw_params_set_access(handle->handle, hardwareParams,
-            SND_PCM_ACCESS_RW_INTERLEAVED);
-    if (err < 0) {
-        LOGE("Unable to configure PCM read/write format: %s",
-                snd_strerror(err));
-        goto done;
-    }
-
-    err = snd_pcm_hw_params_set_format(handle->handle, hardwareParams,
-            handle->format);
-    if (err < 0) {
-        LOGE("Unable to configure PCM format %s (%s): %s",
-                formatName, formatDesc, snd_strerror(err));
-        goto done;
-    }
-
-    LOGV("Set %s PCM format to %s (%s)", streamName(), formatName, formatDesc);
-
-    err = snd_pcm_hw_params_set_channels(handle->handle, hardwareParams,
-            handle->channels);
-    if (err < 0) {
-        LOGE("Unable to set channel count to %i: %s",
-                handle->channels, snd_strerror(err));
-        goto done;
-    }
-
-    LOGV("Using %i %s for %s.", handle->channels,
-            handle->channels == 1 ? "channel" : "channels", streamName());
-
-    err = snd_pcm_hw_params_set_rate_near(handle->handle, hardwareParams,
-            &requestedRate, 0);
-
-    if (err < 0)
-        LOGE("Unable to set %s sample rate to %u: %s",
-                streamName(handle), handle->sampleRate, snd_strerror(err));
-    else if (requestedRate != handle->sampleRate)
-        // Some devices have a fixed sample rate, and can not be changed.
-        // This may cause resampling problems; i.e. PCM playback will be too
-        // slow or fast.
-        LOGW("Requested rate (%u HZ) does not match actual rate (%u HZ)",
-                handle->sampleRate, requestedRate);
-    else
-        LOGV("Set %s sample rate to %u HZ", stream, requestedRate);
-
-#ifdef DISABLE_HARWARE_RESAMPLING
-    // Disable hardware re-sampling.
-    err = snd_pcm_hw_params_set_rate_resample(handle->handle,
-            hardwareParams,
-            static_cast<int>(resample));
-    if (err < 0) {
-        LOGE("Unable to %s hardware resampling: %s",
-                resample ? "enable" : "disable",
-                snd_strerror(err));
-        goto done;
-    }
-#endif
-
-    // Make sure we have at least the size we originally wanted
-    err = snd_pcm_hw_params_set_buffer_size_near(handle->handle, hardwareParams,
-            &bufferSize);
-
-    if (err < 0) {
-        LOGE("Unable to set buffer size to %d:  %s",
-                (int)bufferSize, snd_strerror(err));
-        goto done;
-    }
-
-    // Setup buffers for latency
-    err = snd_pcm_hw_params_set_buffer_time_near(handle->handle,
-            hardwareParams, &latency, NULL);
-    if (err < 0) {
-        /* That didn't work, set the period instead */
-        unsigned int periodTime = latency / 4;
-        err = snd_pcm_hw_params_set_period_time_near(handle->handle,
-                hardwareParams, &periodTime, NULL);
-        if (err < 0) {
-            LOGE("Unable to set the period time for latency: %s", snd_strerror(err));
-            goto done;
-        }
-        snd_pcm_uframes_t periodSize;
-        err = snd_pcm_hw_params_get_period_size(hardwareParams, &periodSize,
-                NULL);
-        if (err < 0) {
-            LOGE("Unable to get the period size for latency: %s", snd_strerror(err));
-            goto done;
-        }
-        bufferSize = periodSize * 4;
-        if (bufferSize < handle->bufferSize) bufferSize = handle->bufferSize;
-        err = snd_pcm_hw_params_set_buffer_size_near(handle->handle,
-                hardwareParams, &bufferSize);
-        if (err < 0) {
-            LOGE("Unable to set the buffer size for latency: %s", snd_strerror(err));
-            goto done;
-        }
+    if (strcmp(device, MM_LP_DEVICE) == 0) {
+        numPeriods = 2;
+        LOGI("Using ping-pong!");
     } else {
-        // OK, we got buffer time near what we expect. See what that did for bufferSize.
-        err = snd_pcm_hw_params_get_buffer_size(hardwareParams, &bufferSize);
-        if (err < 0) {
-            LOGE("Unable to get the buffer size for latency: %s", snd_strerror(err));
-            goto done;
-        }
-        // Does set_buffer_time_near change the passed value? It should.
-        err = snd_pcm_hw_params_get_buffer_time(hardwareParams, &latency, NULL);
-        if (err < 0) {
-            LOGE("Unable to get the buffer time for latency: %s", snd_strerror(err));
-            goto done;
-        }
-        unsigned int periodTime = latency / 4;
-        err = snd_pcm_hw_params_set_period_time_near(handle->handle,
-                hardwareParams, &periodTime, NULL);
-        if (err < 0) {
-            LOGE("Unable to set the period time for latency: %s", snd_strerror(err));
-            goto done;
+        numPeriods = 8;
+        LOGI("Using FIFO");
+    }
+    //get the default array index
+    for (size_t i = 0; i < ARRAY_SIZE(_defaults); i++) {
+        LOGV("setHWParams: device %d bufferSize %d", _defaults[i].devices, _defaults[i].bufferSize);
+        if (_defaults[i].devices == handle->devices) {
+            reqBuffSize = _defaults[i].bufferSize;
+            break;
         }
     }
+    periodSize = reqBuffSize;
+    bufferSize = reqBuffSize * numPeriods;
+    LOGV("setHardwareParams: bufferSize %d periodSize %d channels %d sampleRate %d",
+         bufferSize, periodSize, handle->channels, handle->sampleRate);
 
-    LOGV("Buffer size: %d", (int)bufferSize);
-    LOGV("Latency: %d", (int)latency);
+    param_init(params);
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
+                   SNDRV_PCM_ACCESS_RW_INTERLEAVED);
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                   SNDRV_PCM_FORMAT_S16_LE);
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
+                   SNDRV_PCM_SUBFORMAT_STD);
+    param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, periodSize);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                   handle->channels - 1 ? 32 : 16);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
+                  handle->channels);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, numPeriods);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
+    param_set_hw_refine(handle->handle, params);
 
-    handle->bufferSize = bufferSize;
-    handle->latency = latency;
+    handle->handle->rate = handle->sampleRate;
+    handle->handle->channels = handle->channels;
+    handle->handle->period_size = periodSize;
+    handle->handle->buffer_size = bufferSize;
 
-    // Commit the hardware parameters back to the device.
-    err = snd_pcm_hw_params(handle->handle, hardwareParams);
-    if (err < 0) LOGE("Unable to set hardware parameters: %s", snd_strerror(err));
+    if (param_set_hw_params(handle->handle, params)) {
+        LOGE("cannot set hw params");
+        goto done;
+    }
+    param_dump(params);
+    handle->bufferSize = handle->handle->period_size;
 
-    done:
-    snd_pcm_hw_params_free(hardwareParams);
+    LOGV("Buffer size: %d", (int)(handle->bufferSize));
+    LOGV("Latency: %d", (int)(handle->latency));
+    err = NO_ERROR;
+done:
 
     return err;
 }
 
 status_t setSoftwareParams(alsa_handle_t *handle)
 {
-    snd_pcm_sw_params_t * softwareParams;
-    int err;
+    struct snd_pcm_sw_params* params;
+    struct pcm* pcm = handle->handle;
+    int err = -1;
 
-    snd_pcm_uframes_t bufferSize = 0;
-    snd_pcm_uframes_t periodSize = 0;
-    snd_pcm_uframes_t startThreshold, stopThreshold;
+    unsigned long bufferSize = handle->handle->buffer_size;
+    unsigned long periodSize = handle->handle->period_size;
+    unsigned long startThreshold, stopThreshold;
 
-    if (snd_pcm_sw_params_malloc(&softwareParams) < 0) {
+    params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
+    if (!params) {
         LOG_ALWAYS_FATAL("Failed to allocate ALSA software parameters!");
         return NO_INIT;
     }
-
-    // Get the current software parameters
-    err = snd_pcm_sw_params_current(handle->handle, softwareParams);
-    if (err < 0) {
-        LOGE("Unable to get software parameters: %s", snd_strerror(err));
-        goto done;
-    }
-
-    // Configure ALSA to start the transfer when the buffer is almost full.
-    snd_pcm_get_params(handle->handle, &bufferSize, &periodSize);
 
     if (handle->devices & AudioSystem::DEVICE_OUT_ALL) {
         // For playback, configure ALSA to start the transfer when the
@@ -383,72 +378,118 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     } else {
         // For recording, configure ALSA to start the transfer on the
         // first frame.
-        startThreshold = 1;
+        startThreshold = periodSize;
         stopThreshold = bufferSize;
     }
 
-    err = snd_pcm_sw_params_set_start_threshold(handle->handle, softwareParams,
-            startThreshold);
-    if (err < 0) {
-        LOGE("Unable to set start threshold to %lu frames: %s",
-                startThreshold, snd_strerror(err));
+    // Get the current software parameters
+    params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
+    params->period_step = 1;
+    params->avail_min = handle->channels - 1 ? periodSize/4 : pcm->period_size/2;
+    params->start_threshold = handle->channels - 1 ? startThreshold/4 : startThreshold/2;
+    params->stop_threshold = handle->channels - 1 ? stopThreshold/4 : stopThreshold/2;
+    params->silence_threshold = 0;
+    params->silence_size = 0;
+
+    if (param_set_sw_params(handle->handle, params)) {
+        LOGE("cannot set sw params");
         goto done;
     }
-
-    err = snd_pcm_sw_params_set_stop_threshold(handle->handle, softwareParams,
-            stopThreshold);
-    if (err < 0) {
-        LOGE("Unable to set stop threshold to %lu frames: %s",
-                stopThreshold, snd_strerror(err));
-        goto done;
-    }
-
-    // Allow the transfer to start when at least periodSize samples can be
-    // processed.
-    err = snd_pcm_sw_params_set_avail_min(handle->handle, softwareParams,
-            periodSize);
-    if (err < 0) {
-        LOGE("Unable to configure available minimum to %lu: %s",
-                periodSize, snd_strerror(err));
-        goto done;
-    }
-
-    // Commit the software parameters back to the device.
-    err = snd_pcm_sw_params(handle->handle, softwareParams);
-    if (err < 0) LOGE("Unable to configure software parameters: %s",
-            snd_strerror(err));
-
-    done:
-    snd_pcm_sw_params_free(softwareParams);
-
+    return NO_ERROR;
+done:
     return err;
+}
+
+
+void setAlsaControls(alsa_handle_t *handle, uint32_t devices, int mode)
+{
+    LOGV("%s: device %d mode %d", __FUNCTION__, devices, mode);
+
+    ALSAControl control("/dev/snd/controlC0");
+
+    // ToDo: If curDevice = newDevice don't do anything
+    // If different, disable previous and enable new controls
+    // Handle both input and output devices
+
+    /* check whether the devices is input or not */
+    /* for output devices */
+    if (devices & AudioSystem::DEVICE_OUT_ALL) {
+        if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+            LOGV("Enabling DEVICE_OUT_SPEAKER");
+            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 1, -1);       // HFDAC L -> HF Mux
+            // These controls work on 8960 target only
+            control.set("RX3 MIX1 INP1", "RX1");
+            control.set("RX4 MIX1 INP1", "RX2");
+            control.set("LINEOUT1 DAC Switch", 1, 0);
+            control.set("LINEOUT3 DAC Switch", 1, 0);
+            control.set("Speaker Function", "On");
+            control.set("LINEOUT1 Volume", "100");
+            control.set("LINEOUT3 Volume", "100");
+
+            // For 8660 comment above and uncomment below
+            //control.set("EAR Mixer CDC_RX1L Switch", 1, -1);
+        } else if (devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
+            LOGV("Enabling DEVICE_OUT_HEADSET");
+            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 1, -1);       // HFDAC L -> HF Mux
+            control.set("RX1 MIX1 INP1", "RX1");
+            control.set("RX2 MIX1 INP1", "RX2");
+            control.set("HPHL DAC Switch", 1, 0);
+            control.set("HPHR DAC Switch", 1, 0);
+            control.set("HPHL Volume", "100");
+            control.set("HPHR Volume", "100");
+        } else {
+            LOGV("Disabling DEVICE_OUT_SPEAKER");
+            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 0, -1);       // HFDAC L -> HF Mux
+            control.set("EAR Mixer CDC_RX1L Switch", 0, -1);       // MM_DL    -> DL2 Mixer
+            //control.set("LINE_R Mixer CDC_RX1R Switch", 0, -1);
+        }
+    } else if (devices & AudioSystem::DEVICE_IN_ALL) {
+        if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+            LOGV("Enabling DEVICE_IN_BUILTIN_MIC");
+            control.set("MultiMedia1 Mixer SLIM_0_TX", 1, -1);
+            // uncomment the below for 8660
+            //control.set("DMIC Left Mux", "DMIC0");
+            //control.set("TX1L Filter Mux", "Digital");
+            //These control are for 8960 target
+            control.set("SLIM TX6 MUX", "DEC6");
+            control.set("SLIM TX6 Digital Volume", "100");
+            control.set("DEC6 MUX", "ADC1");
+
+        } else {
+            LOGV("Disabling DEVICE_IN_BUILTIN_MIC");
+            control.set("MultiMedia1 Mixer SLIM_0_TX", 0, -1);
+            //uncomment this for 8660
+            //control.set("DMIC Left DMIC1", "DMIC0");
+            //control.set("TX1L Filter Digital", "Digital");
+            // These are for 8960
+            control.set("SLIM TX6 MUX", "DEC6");
+            control.set("DEC6 MUX", "ADC1");
+        }
+    }
+    handle->curDev = devices;
+    handle->curMode = mode;
 }
 
 // ----------------------------------------------------------------------------
 
 static status_t s_init(alsa_device_t *module, ALSAHandleList &list)
 {
+    LOGV("s_init: Initializing devices for ALSA module");
+
     list.clear();
 
-    snd_pcm_uframes_t bufferSize = _defaultsOut.bufferSize;
+    for (size_t i = 0; i < ARRAY_SIZE(_defaults); i++) {
 
-    for (size_t i = 1; (bufferSize & ~i) != 0; i <<= 1)
-        bufferSize &= ~i;
+        unsigned long bufferSize = _defaults[i].bufferSize;
 
-    _defaultsOut.module = module;
-    _defaultsOut.bufferSize = bufferSize;
+        for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
+            bufferSize &= ~b;
 
-    list.push_back(_defaultsOut);
+        _defaults[i].module = module;
+        _defaults[i].bufferSize = bufferSize;
 
-    bufferSize = _defaultsIn.bufferSize;
-
-    for (size_t i = 1; (bufferSize & ~i) != 0; i <<= 1)
-        bufferSize &= ~i;
-
-    _defaultsIn.module = module;
-    _defaultsIn.bufferSize = bufferSize;
-
-    list.push_back(_defaultsIn);
+        list.push_back(_defaults[i]);
+    }
 
     return NO_ERROR;
 }
@@ -460,64 +501,79 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
     // changes, but we might be recovering from an error or manipulating
     // mixer settings (see asound.conf).
     //
+    unsigned flags = 0;
+    int err = NO_ERROR;
     s_close(handle);
 
-    LOGD("open called for devices %08x in mode %d...", devices, mode);
+    LOGV("s_open: handle %p devices 0x%x in mode %d", handle, devices, mode);
 
     const char *stream = streamName(handle);
     const char *devName = deviceName(handle, devices, mode);
 
-    int err;
+    // ASoC multicomponent requires a valid path (frontend/backend) for
+    // the device to be opened
+    setAlsaControls(handle, devices, mode);
 
-    for (;;) {
-        // The PCM stream is opened in blocking mode, per ALSA defaults.  The
-        // AudioFlinger seems to assume blocking mode too, so asynchronous mode
-        // should not be used.
-        err = snd_pcm_open(&handle->handle, devName, direction(handle),
-                SND_PCM_ASYNC);
-        if (err == 0) break;
-
-        // See if there is a less specific name we can try.
-        // Note: We are changing the contents of a const char * here.
-        char *tail = strrchr(devName, '_');
-        if (!tail) break;
-        *tail = 0;
+    // The PCM stream is opened in blocking mode, per ALSA defaults.  The
+    // AudioFlinger seems to assume blocking mode too, so asynchronous mode
+    // should not be used.
+    //if(direction(handle) == SND_PCM_STREAM_PLAYBACK) {
+    if(devices & AudioSystem::DEVICE_OUT_ALL) {
+        flags = PCM_OUT;
+    } else {
+        flags = PCM_IN;
     }
-
-    if (err < 0) {
-        // None of the Android defined audio devices exist. Open a generic one.
-        devName = "default";
-        err = snd_pcm_open(&handle->handle, devName, direction(handle), 0);
+    if (handle->channels == 1) {
+        flags |= PCM_MONO;
+    } else {
+        flags |= PCM_STEREO;
     }
+    handle->handle = pcm_open(flags, (char*)devName);
 
-    if (err < 0) {
-        LOGE("Failed to Initialize any ALSA %s device: %s",
-                stream, strerror(err));
+    if (!handle->handle) {
+        LOGE("s_open: Failed to initialize ALSA %s device '%s': %s", stream, devName, strerror(err));
         return NO_INIT;
     }
 
+    mActive = true;
+
+    handle->handle->flags = flags;
     err = setHardwareParams(handle);
 
-    if (err == NO_ERROR) err = setSoftwareParams(handle);
+    if (err == NO_ERROR) {
+        err = setSoftwareParams(handle);
+    }
 
-    LOGI("Initialized ALSA %s device %s", stream, devName);
+    if(err != NO_ERROR) {
+        LOGE("Set HW/SW params failed: Closing the pcm stream");
+        s_close(handle);
+    }
 
-    handle->curDev = devices;
-    handle->curMode = mode;
-
-    return err;
+    return NO_ERROR;
 }
 
 static status_t s_close(alsa_handle_t *handle)
 {
     status_t err = NO_ERROR;
-    snd_pcm_t *h = handle->handle;
+    struct pcm *h = handle->handle;
+    ALSAControl control("/dev/snd/controlC0");
+
+    if (handle->curDev & AudioSystem::DEVICE_OUT_SPEAKER) {
+        LOGV("Disabling DEVICE_OUT_SPEAKER");
+        control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 0, -1);
+        control.set("RX3 MIX1 INP1", "ZERO");
+        control.set("RX4 MIX1 INP1", "ZERO");
+        control.set("LINEOUT1 DAC Switch", 0, 0);
+        control.set("LINEOUT3 DAC Switch", 0, 0);
+        control.set("Speaker Function", "Off");
+    }
     handle->handle = 0;
     handle->curDev = 0;
     handle->curMode = 0;
+    LOGV("s_close: handle %p", handle);
     if (h) {
-        snd_pcm_drain(h);
-        err = snd_pcm_close(h);
+        err = pcm_close(h);
+        mActive = false;
     }
 
     return err;
