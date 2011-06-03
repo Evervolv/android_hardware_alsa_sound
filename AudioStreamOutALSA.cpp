@@ -1,6 +1,7 @@
 /* AudioStreamOutALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
+ ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -23,7 +24,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 
-#define LOG_TAG "AudioHardwareALSA"
+#define LOG_TAG "AudioStreamOutALSA"
 #define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
@@ -79,13 +80,6 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         mPowerLock = true;
     }
 
-    acoustic_device_t *aDev = acoustics();
-
-    // For output, we will pass the data on to the acoustics module, but the actual
-    // data is expected to be sent to the audio device directly as well.
-    if (aDev && aDev->write)
-        aDev->write(aDev, buffer, bytes);
-
     snd_pcm_sframes_t n;
     size_t            sent = 0;
     status_t          err;
@@ -111,8 +105,6 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             // Somehow the stream is in a bad state. The driver probably
             // has a bug and snd_pcm_recover() doesn't seem to handle this.
             mHandle->module->open(mHandle, mHandle->curDev, mHandle->curMode);
-
-            if (aDev && aDev->recover) aDev->recover(aDev, n);
         }
         else if (n < 0) {
             // Recovery is part of pcm_write. TODO split is later.
@@ -161,6 +153,8 @@ status_t AudioStreamOutALSA::standby()
     AutoMutex lock(mLock);
 
     LOGV("standby");
+
+    mHandle->module->standby(mHandle);
 
     if (mPowerLock) {
         release_wake_lock ("AudioOutLock");

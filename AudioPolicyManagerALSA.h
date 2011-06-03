@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
+ * Copyright (C) 2011, Code Aurora Forum. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,14 +36,69 @@ namespace android {
 // Time in seconds during which we consider that music is still active after a music
 // track was stopped - see computeVolume()
 #define SONIFICATION_HEADSET_MUSIC_DELAY  5
-class AudioPolicyManagerALSA: public AudioPolicyManagerBase
+class AudioPolicyManager: public AudioPolicyManagerBase
 {
 
 public:
-                AudioPolicyManagerALSA(AudioPolicyClientInterface *clientInterface);
-        virtual ~AudioPolicyManagerALSA();
+                AudioPolicyManager(AudioPolicyClientInterface *clientInterface)
+                : AudioPolicyManagerBase(clientInterface) {
+                    mLPADecodeOutput = -1;
+                    mLPAMuted = false;
+                    mLPAStreamType = AudioSystem::DEFAULT;
+                }
 
-        // Nothing currently different between the Base implementation.
+        virtual ~AudioPolicyManager() {}
+
+        // AudioPolicyInterface
+        virtual status_t setDeviceConnectionState(AudioSystem::audio_devices device,
+                                                          AudioSystem::device_connection_state state,
+                                                          const char *device_address);
+        virtual void setPhoneState(int state);
+
+        // return appropriate device for streams handled by the specified strategy according to current
+        // phone state, connected devices...
+        // if fromCache is true, the device is returned from mDeviceForStrategy[], otherwise it is determined
+        // by current state (device connected, phone state, force use, a2dp output...)
+        // This allows to:
+        //  1 speed up process when the state is stable (when starting or stopping an output)
+        //  2 access to either current device selection (fromCache == true) or
+        // "future" device selection (fromCache == false) when called from a context
+        //  where conditions are changing (setDeviceConnectionState(), setPhoneState()...) AND
+        //  before updateDeviceForStrategy() is called.
+        virtual uint32_t getDeviceForStrategy(routing_strategy strategy, bool fromCache = true);
+
+        virtual audio_io_handle_t getSession(AudioSystem::stream_type stream,
+                                            uint32_t format,
+                                            AudioSystem::output_flags flags,
+                                            int32_t  sessionId);
+        virtual void pauseSession(audio_io_handle_t output, AudioSystem::stream_type stream);
+        virtual void resumeSession(audio_io_handle_t output, AudioSystem::stream_type stream);
+        virtual void releaseSession(audio_io_handle_t output);
+        virtual status_t startOutput(audio_io_handle_t output, AudioSystem::stream_type stream, int session = 0);
+        virtual status_t stopOutput(audio_io_handle_t output, AudioSystem::stream_type stream, int session = 0);
+        virtual void setForceUse(AudioSystem::force_use usage, AudioSystem::forced_config config);
+        status_t startInput(audio_io_handle_t input);
+
+protected:
+        // true is current platform implements a back microphone
+        virtual bool hasBackMicrophone() const { return false; }
+#ifdef WITH_A2DP
+        // true is current platform supports suplication of notifications and ringtones over A2DP output
+        virtual bool a2dpUsedForSonification() const { return true; }
+#endif
+        // change the route of the specified output
+        void setOutputDevice(audio_io_handle_t output, uint32_t device, bool force = false, int delayMs = 0);
+        // check that volume change is permitted, compute and send new volume to audio hardware
+        status_t checkAndSetVolume(int stream, int index, audio_io_handle_t output, uint32_t device, int delayMs = 0, bool force = false);
+        // select input device corresponding to requested audio source
+        virtual uint32_t getDeviceForInputSource(int inputSource);
+        // Mute or unmute the stream on the specified output
+        void setStreamMute(int stream, bool on, audio_io_handle_t output, int delayMs = 0);
+        audio_io_handle_t mLPADecodeOutput;           // active output handler
+        audio_io_handle_t mLPAActiveOuput;           // LPA Output Handler during inactive state
+
+        bool    mLPAMuted;
+        AudioSystem::stream_type  mLPAStreamType;
+        AudioSystem::stream_type  mLPAActiveStreamType;
 };
-
 };

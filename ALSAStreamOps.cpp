@@ -1,6 +1,7 @@
 /* ALSAStreamOps.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
+ ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -65,16 +66,6 @@ static inline uint32_t popCount(uint32_t u)
     return u;
 }
 
-acoustic_device_t *ALSAStreamOps::acoustics()
-{
-    return mParent->mAcousticDevice;
-}
-
-ALSAMixer *ALSAStreamOps::mixer()
-{
-    return mParent->mMixer;
-}
-
 status_t ALSAStreamOps::set(int      *format,
                             uint32_t *channels,
                             uint32_t *rate)
@@ -84,7 +75,7 @@ status_t ALSAStreamOps::set(int      *format,
             return BAD_VALUE;
     } else if (channels) {
         *channels = 0;
-        if (mHandle->devices & AudioSystem::DEVICE_OUT_ALL)
+        if (mHandle->devices & AudioSystem::DEVICE_OUT_ALL) {
             switch(mHandle->channels) {
                 case 4:
                     *channels |= AudioSystem::CHANNEL_OUT_BACK_LEFT;
@@ -98,7 +89,7 @@ status_t ALSAStreamOps::set(int      *format,
                     *channels |= AudioSystem::CHANNEL_OUT_FRONT_LEFT;
                     break;
             }
-        else
+        } else {
             switch(mHandle->channels) {
                 default:
                 case 2:
@@ -108,13 +99,15 @@ status_t ALSAStreamOps::set(int      *format,
                     *channels |= AudioSystem::CHANNEL_IN_LEFT;
                     break;
             }
+        }
     }
 
     if (rate && *rate > 0) {
         if (mHandle->sampleRate != *rate)
             return BAD_VALUE;
-    } else if (rate)
+    } else if (rate) {
         *rate = mHandle->sampleRate;
+    }
 
     snd_pcm_format_t iformat = mHandle->format;
 
@@ -155,21 +148,10 @@ status_t ALSAStreamOps::set(int      *format,
 
 status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
-    AudioParameter param = AudioParameter(keyValuePairs);
-    String8 key = String8(AudioParameter::keyRouting);
-    status_t status = NO_ERROR;
-    int device;
-    LOGV("setParameters() %s", keyValuePairs.string());
+    AutoMutex lock(mLock);
 
-    if (param.getInt(key, device) == NO_ERROR) {
-        AutoMutex lock(mLock);
-        mParent->mALSADevice->route(mHandle, (uint32_t)device, mParent->mode());
-        param.remove(key);
-    }
+    status_t status = mParent->setParameters(keyValuePairs);
 
-    if (param.size()) {
-        status = BAD_VALUE;
-    }
     return status;
 }
 

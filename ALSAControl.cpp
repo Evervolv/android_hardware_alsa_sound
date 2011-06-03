@@ -1,6 +1,7 @@
 /* ALSAControl.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
+ ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -55,11 +56,7 @@ status_t ALSAControl::get(const char *name, unsigned int &value, int index)
 
     if (!mHandle) {
         LOGE("Control not initialized");
-        //return NO_INIT;
-        mHandle = mixer_open("/dev/snd/controlC0");
-        if (!mHandle) {
-            LOGE("Could not open mixer");
-        }
+        return NO_INIT;
     }
 
     ctl =  mixer_get_control(mHandle, name, index);
@@ -82,6 +79,10 @@ status_t ALSAControl::set(const char *name, unsigned int value, int index)
 
     // ToDo: Do we need to send index here? Right now it works with 0
     ctl = mixer_get_control(mHandle, name, 0);
+    if(ctl == NULL) {
+        LOGE("Could not get the mixer control");
+        return BAD_VALUE;
+    }
     ret = mixer_ctl_set(ctl, value);
     return (ret < 0) ? BAD_VALUE : NO_ERROR;
 }
@@ -98,9 +99,12 @@ status_t ALSAControl::set(const char *name, const char *value)
     }
 
     ctl = mixer_get_control(mHandle, name, 0);
+    if(ctl == NULL) {
+        LOGE("Could not get the mixer control");
+        return BAD_VALUE;
+    }
     ret = mixer_ctl_select(ctl, value);
     return (ret < 0) ? BAD_VALUE : NO_ERROR;
-    return BAD_VALUE;
 }
 
 };        // namespace android

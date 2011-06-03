@@ -1,6 +1,7 @@
 # hardware/libaudio-alsa/Android.mk
 #
 # Copyright 2008 Wind River Systems
+# Copyright (c) 2011, Code Aurora Forum. All rights reserved.
 #
 
 ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
@@ -92,27 +93,4 @@ endif
   LOCAL_MODULE:= alsa.default
 
   include $(BUILD_SHARED_LIBRARY)
-
-# This is the default Acoustics module which is essentially a stub
-
-  include $(CLEAR_VARS)
-
-  LOCAL_PRELINK_MODULE := false
-
-  LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
-
-  LOCAL_CFLAGS := -D_POSIX_SOURCE -Wno-multichar
-
-  LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
-  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
-  LOCAL_C_INCLUDES += $(LOCAL_PATH)/../msm7k/libalsa-intf/
-
-  LOCAL_SRC_FILES:= acoustics_default.cpp
-
-  LOCAL_SHARED_LIBRARIES := liblog
-
-  LOCAL_MODULE:= acoustics.default
-
-  include $(BUILD_SHARED_LIBRARY)
-
 endif

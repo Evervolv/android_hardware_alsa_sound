@@ -1,6 +1,7 @@
 /* AudioHardwareALSA.h
  **
  ** Copyright 2008-2010, Wind River Systems
+ ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -33,6 +34,28 @@ namespace android
 
 class AudioHardwareALSA;
 
+#define SND_DEVICE_HANDSET          0x1
+#define SND_DEVICE_SPEAKER          0x2
+#define SND_DEVICE_HEADSET          0x4
+#define SND_DEVICE_HEADPHONE        0x8
+#define SND_DEVICE_ANC_HEADSET      0x10
+#define SND_DEVICE_ANC_HEADPHONE    0x20
+#define SND_DEVICE_BT_SCO           0x40
+#define SND_DEVICE_FM               0x80
+#define SND_DEVICE_FM_TX            0x100
+#define SND_DEVICE_HDMI             0x200
+
+#define ALSA_PLAYBACK           1
+#define ALSA_PLAYBACK_LPA       2
+#define ALSA_VOICE_CALL         3
+#define ALSA_FM_RADIO           4
+#define ALSA_RECORD             5
+#define ALSA_RECORD_FM          6
+#define ALSA_RECORD_VOICE_CALL  7
+
+#define CODEC_ICODEC            0x1
+#define CODEC_HDMI              0x2
+#define CODEC_RIVA              0x4
 /**
  * The id of ALSA module
  */
@@ -44,6 +67,7 @@ struct alsa_device_t;
 struct alsa_handle_t {
     alsa_device_t *     module;
     uint32_t            devices;
+    uint32_t            useCase;
     uint32_t            curDev;
     int                 curMode;
     struct pcm *        handle;
@@ -63,30 +87,10 @@ struct alsa_device_t {
     status_t (*init)(alsa_device_t *, ALSAHandleList &);
     status_t (*open)(alsa_handle_t *, uint32_t, int);
     status_t (*close)(alsa_handle_t *);
+    status_t (*standby)(alsa_handle_t *);
     status_t (*route)(alsa_handle_t *, uint32_t, int);
-};
-
-/**
- * The id of acoustics module
- */
-#define ACOUSTICS_HARDWARE_MODULE_ID    "acoustics"
-#define ACOUSTICS_HARDWARE_NAME         "acoustics"
-
-struct acoustic_device_t {
-    hw_device_t common;
-
-    // Required methods...
-    status_t (*use_handle)(acoustic_device_t *, alsa_handle_t *);
-    status_t (*cleanup)(acoustic_device_t *);
-
-    status_t (*set_params)(acoustic_device_t *, AudioSystem::audio_in_acoustics, void *);
-
-    // Optional methods...
-    ssize_t (*read)(acoustic_device_t *, void *, size_t);
-    ssize_t (*write)(acoustic_device_t *, const void *, size_t);
-    status_t (*recover)(acoustic_device_t *, int);
-
-    void *              modPrivate;
+    status_t (*startVoiceCall)(alsa_handle_t *, uint32_t, int);
+    status_t (*startFm)(alsa_handle_t *, uint32_t, int);
 };
 
 // ----------------------------------------------------------------------------
@@ -114,12 +118,11 @@ public:
 class ALSAControl
 {
 public:
-    ALSAControl(const char *device = "hw:00");
+    ALSAControl(const char *device = "/dev/snd/controlC0");
     virtual                ~ALSAControl();
 
     status_t                get(const char *name, unsigned int &value, int index = 0);
     status_t                set(const char *name, unsigned int value, int index = -1);
-
     status_t                set(const char *name, const char *);
 
 private:
@@ -147,9 +150,6 @@ public:
 
 protected:
     friend class AudioHardwareALSA;
-
-    acoustic_device_t *acoustics();
-    ALSAMixer *mixer();
 
     AudioHardwareALSA *     mParent;
     alsa_handle_t *         mHandle;
@@ -308,7 +308,7 @@ public:
     virtual status_t    getMicMute(bool* state);
 
     // set/get global audio parameters
-    //virtual status_t    setParameters(const String8& keyValuePairs);
+    virtual status_t    setParameters(const String8& keyValuePairs);
     //virtual String8     getParameters(const String8& keys);
 
     // Returns audio input buffer size according to parameters passed or 0 if one of the
@@ -346,15 +346,13 @@ public:
 
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
+    void                doRouting(int device);
 
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
     friend class ALSAStreamOps;
 
-    ALSAMixer *         mMixer;
-
     alsa_device_t *     mALSADevice;
-    acoustic_device_t * mAcousticDevice;
 
     ALSAHandleList      mDeviceList;
 };
