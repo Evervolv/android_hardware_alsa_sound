@@ -37,7 +37,7 @@ ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
     libc
 
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
-  LOCAL_SHARED_LIBRARIES += liba2dp
+  LOCAL_SHARED_LIBRARIES += liba2dp libbinder
 endif
 
   include $(BUILD_SHARED_LIBRARY)
