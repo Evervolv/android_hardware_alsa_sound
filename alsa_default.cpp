@@ -456,15 +456,20 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     uint32_t codecType = getCodecType(newSoundDevice);
 
     if(handle->useCase == ALSA_VOICE_CALL) {
-        LOGV("Enabling Mixer controls for voice call");
-        control.set("SLIM_0_RX_Voice Mixer CSVoice", 1, 0);
-        control.set("Voice_Tx Mixer SLIM_0_TX_Voice", 1, 0);
+        if(codecType == CODEC_ICODEC) {
+           LOGV("Enabling Mixer controls for voice call");
+           control.set("SLIM_0_RX_Voice Mixer CSVoice", 1, 0);
+           control.set("Voice_Tx Mixer SLIM_0_TX_Voice", 1, 0);
+        } else if (codecType == CODEC_RIVA) {
+           LOGV("Enabling Mixer controls for voice call over BT");
+           control.set("INTERNAL_BT_SCO_RX_Voice Mixer CSVoice",1,0);
+           control.set("Voice_Tx Mixer INTERNAL_BT_SCO_TX_Voice", 1, 0);
+        }
     }
 
     if(handle->useCase == ALSA_FM_RADIO) {
-        // ToDo: Add FM related mixer controls
         LOGV("Enabling Mixer controls for FM Raadio");
-        control.set("SLIMBUS_0_RX Port Mixer INT_FM_TX", 1, 0);
+        control.set("SLIMBUS_0_RX Port Mixer INTERNAL_FM_TX", 1, 0);
     }
 
     if(handle->useCase == ALSA_PLAYBACK || handle->useCase == ALSA_RECORD) {
@@ -474,11 +479,11 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
             control.set("MultiMedia1 Mixer SLIM_0_TX", 1, 0);
         }
         if (codecType & CODEC_HDMI) {
-            // ToDo: Add HDMI related mixer controls
             control.set("HDMI Mixer MultiMedia1", 1, 0);
         }
         if (codecType & CODEC_RIVA) {
-            // ToDo: Add BT/FM related mixer controls
+           control.set("INTERNAL_BT_SCO_RX Audio Mixer MultiMedia1", 1, 0);
+           control.set("MultiMedia1 Mixer INTERNAL_BT_SCO_TX", 1, 0);
         }
     }
 
@@ -555,15 +560,20 @@ void resetRoutingControls(alsa_handle_t *handle)
     uint32_t codecType = getCodecType(curSoundDevice);
 
     if(handle->useCase == ALSA_VOICE_CALL) {
-        LOGV("Disabling Mixer controls for voice call");
-        control.set("SLIM_0_RX_Voice Mixer CSVoice", 0, 0);
-        control.set("Voice_Tx Mixer SLIM_0_TX_Voice", 0, 0);
+        if(codecType == CODEC_ICODEC) {
+           LOGV("Disabling Mixer controls for voice call");
+           control.set("SLIM_0_RX_Voice Mixer CSVoice", 0, 0);
+           control.set("Voice_Tx Mixer SLIM_0_TX_Voice", 0, 0);
+        } else if(codecType == CODEC_RIVA) {
+           LOGV("Disabling Mixer controls for voice call over BT");
+           control.set("INTERNAL_BT_SCO_RX_Voice Mixer CSVoice",0,0);
+           control.set("Voice_Tx Mixer INTERNAL_BT_SCO_TX_Voice", 0, 0);
+        }
     }
 
     if(handle->useCase == ALSA_FM_RADIO) {
-        // ToDo: Add FM related mixer controls
         LOGV("Disabling Mixer controls for FM Radio");
-        control.set("SLIMBUS_0_RX Port Mixer INT_FM_TX", 0, 0);
+        control.set("SLIMBUS_0_RX Port Mixer INTERNAL_FM_TX", 0, 0);
     }
 
     if(handle->useCase == ALSA_PLAYBACK || handle->useCase == ALSA_RECORD) {
@@ -572,11 +582,11 @@ void resetRoutingControls(alsa_handle_t *handle)
             control.set("MultiMedia1 Mixer SLIM_0_TX", 0, 0);
         }
         if (codecType & CODEC_HDMI) {
-            // ToTest
             control.set("HDMI Mixer MultiMedia1", 0, 0);
         }
         if (codecType & CODEC_RIVA) {
-            // ToDo
+            control.set("INTERNAL_BT_SCO_RX Audio Mixer MultiMedia1", 0, 0);
+            control.set("MultiMedia1 Mixer INTERNAL_BT_SCO_TX", 0, 0);
         }
     }
 }
