@@ -87,7 +87,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     int write_pending = bytes;
 
     if(mHandle->handle == NULL) {
-        mHandle->module->open(mHandle, mHandle->curDev, mHandle->curMode);
+        mHandle->module->open(mHandle, mDevice, mHandle->curMode);
         if(mHandle->handle == NULL) {
             LOGE("write:: device open failed");
             return 0;

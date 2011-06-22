@@ -135,7 +135,7 @@ public:
     ALSAStreamOps(AudioHardwareALSA *parent, alsa_handle_t *handle);
     virtual            ~ALSAStreamOps();
 
-    status_t            set(int *format, uint32_t *channels, uint32_t *rate);
+    status_t            set(int *format, uint32_t *channels, uint32_t *rate, uint32_t devices);
 
     status_t            setParameters(const String8& keyValuePairs);
     String8             getParameters(const String8& keys);
@@ -156,6 +156,7 @@ protected:
 
     Mutex                   mLock;
     bool                    mPowerLock;
+    uint32_t                mDevice;
 };
 
 // ----------------------------------------------------------------------------

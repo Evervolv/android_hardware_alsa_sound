@@ -105,7 +105,6 @@ static int s_device_close(hw_device_t* device)
 
 static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 
-static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
 static void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
 static void resetAlsaControls(alsa_handle_t *handle);
 static void resetRoutingControls(alsa_handle_t *handle);
@@ -216,7 +215,7 @@ static alsa_handle_t _defaults[] = {
         format      : SNDRV_PCM_FORMAT_S16_LE,
         channels    : 1,
         sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
-        latency     : 250000,
+        latency     : 96000,
         bufferSize  : 4096,
         modPrivate  : (void *)&setAlsaControls,
     },
@@ -230,7 +229,7 @@ static alsa_handle_t _defaults[] = {
         format      : SNDRV_PCM_FORMAT_S16_LE,
         channels    : 1,
         sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
-        latency     : 250000,
+        latency     : 96000,
         bufferSize  : 4096,
         modPrivate  : (void *)&setAlsaControls,
     },
@@ -244,7 +243,7 @@ static alsa_handle_t _defaults[] = {
         format      : SNDRV_PCM_FORMAT_S16_LE,
         channels    : 1,
         sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
-        latency     : 250000,
+        latency     : 96000,
         bufferSize  : 4096,
         modPrivate  : (void *)&setAlsaControls,
     },
@@ -391,18 +390,20 @@ uint32_t getNewSoundDevice(uint32_t devices)
         newDevice |= SND_DEVICE_SPEAKER;
     }
 
-    if(devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
+    if(devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET ||
+       devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
         newDevice |= SND_DEVICE_HEADSET;
     } else if(devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
         newDevice |= SND_DEVICE_HEADPHONE;
-    } else if(devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) {
+    } else if(devices & AudioSystem::DEVICE_OUT_ANC_HEADSET ||
+              devices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
         newDevice |= SND_DEVICE_ANC_HEADSET;
     } else if(devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
         newDevice |= SND_DEVICE_ANC_HEADPHONE;
     }
     if(devices == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO ||
-              devices == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
-              devices == AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+       devices == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
+       devices == AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
         newDevice = SND_DEVICE_BT_SCO;
     }
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL ||
@@ -443,26 +444,6 @@ uint32_t getCodecType(uint32_t soundDevice)
         codecType |= CODEC_RIVA;
     }
     return codecType;
-}
-
-void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
-{
-    LOGV("%s: E - handle %p useCase %d device %d", __FUNCTION__, handle, handle->useCase, devices);
-
-    ALSAControl control("/dev/snd/controlC0");
-
-    uint32_t newSoundDevice = getNewSoundDevice(devices);
-    uint32_t codecType = getCodecType(newSoundDevice);
-
-    if(curSoundDevice == newSoundDevice && curSoundDeviceActive) {
-        LOGV("Current active device is same as new device");
-        return;
-    }
-    if(curSoundDevice != newSoundDevice && curSoundDeviceActive) {
-        resetRoutingControls(handle);
-        resetAlsaControls(handle);
-    }
-    setAlsaControls(handle,devices,mode);
 }
 
 void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
@@ -539,11 +520,11 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
                 LOGV("Enabling HEADSET_TX");
                 control.set("SLIM TX7 MUX", "DEC5");
                 control.set("DEC5 MUX", "ADC2");
-                control.set("SLIM TX5 Digital Volume", "100");
+                control.set("DEC5 Volume", "100");
             } else {
                 LOGV("Enabling HANDSET_TX");
                 control.set("SLIM TX7 MUX", "DEC6");
-                control.set("SLIM TX6 Digital Volume", "100");
+                control.set("DEC6 Volume", "100");
                 control.set("DEC6 MUX", "ADC1");
             }
         }
@@ -551,11 +532,11 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
             LOGV("Enabling HANDSET_RX");
             control.set("RX1 MIX1 INP1", "RX1");
             control.set("DAC1 Switch", 1, 0);
-            control.set("SLIM RX1 Digital Volume", "100");
+            control.set("RX1 Digital Volume", "100");
 
             LOGV("Enabling HANDSET_TX");
             control.set("SLIM TX7 MUX", "DEC6");
-            control.set("SLIM TX6 Digital Volume", "100");
+            control.set("DEC6 Volume", "100");
             control.set("DEC6 MUX", "ADC1");
         }
     }
@@ -581,7 +562,7 @@ void resetRoutingControls(alsa_handle_t *handle)
 
     if(handle->useCase == ALSA_FM_RADIO) {
         // ToDo: Add FM related mixer controls
-        LOGV("Disabling Mixer controls for FM Raadio");
+        LOGV("Disabling Mixer controls for FM Radio");
         control.set("SLIMBUS_0_RX Port Mixer INT_FM_TX", 0, 0);
     }
 
@@ -918,12 +899,6 @@ static status_t s_close(alsa_handle_t *handle)
 
     if (h) {
         numActiveUseCases --;
-        resetRoutingControls(handle);
-        // If there are no other active use cases, disable the device
-        if(!numActiveUseCases) {
-            resetAlsaControls(handle);
-        }
-
         err = pcm_close(h);
         if(err != NO_ERROR) {
             LOGE("s_close: pcm_close failed with err %d", err);
@@ -936,6 +911,12 @@ static status_t s_close(alsa_handle_t *handle)
                 LOGE("s_close: pcm_close failed with err %d", err);
             }
             handle->modPrivate = NULL;
+        }
+
+        resetRoutingControls(handle);
+        // If there are no other active use cases, disable the device
+        if(!numActiveUseCases) {
+            resetAlsaControls(handle);
         }
     }
 
@@ -956,14 +937,14 @@ static status_t s_standby(alsa_handle_t *handle)
     LOGV("s_standby\n");
     if (h) {
         numActiveUseCases --;
+        err = pcm_close(h);
+        if(err != NO_ERROR) {
+            LOGE("s_standby: pcm_close failed with err %d", err);
+        }
         resetRoutingControls(handle);
         // If there are no other active use cases, disable the device
         if(!numActiveUseCases) {
             resetAlsaControls(handle);
-        }
-        err = pcm_close(h);
-        if(err != NO_ERROR) {
-            LOGE("s_standby: pcm_close failed with err %d", err);
         }
     }
 
@@ -976,7 +957,9 @@ static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode)
 
     LOGV("s_route: devices 0x%x in mode %d useCase %d", devices, mode, handle->useCase);
     if (handle->handle) {
-        switchDevice(handle, devices, mode);
+        resetRoutingControls(handle);
+        resetAlsaControls(handle);
+        setAlsaControls(handle,devices,mode);
     } else {
         handle->curDev = devices;
         handle->curMode = mode;

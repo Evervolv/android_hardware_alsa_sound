@@ -73,7 +73,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     size_t            read = 0;
 
     if(mHandle->handle == NULL) {
-        mHandle->module->open(mHandle, mHandle->curDev, mHandle->curMode);
+        mHandle->module->open(mHandle, mDevice, mHandle->curMode);
         if(mHandle->handle == NULL) {
             LOGE("read:: PCM device open failed");
             return 0;

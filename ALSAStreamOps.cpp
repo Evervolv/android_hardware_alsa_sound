@@ -68,8 +68,10 @@ static inline uint32_t popCount(uint32_t u)
 
 status_t ALSAStreamOps::set(int      *format,
                             uint32_t *channels,
-                            uint32_t *rate)
+                            uint32_t *rate,
+                            uint32_t devices)
 {
+    mDevice = devices;
     if (channels && *channels != 0) {
         if (mHandle->channels != popCount(*channels))
             return BAD_VALUE;
@@ -148,9 +150,15 @@ status_t ALSAStreamOps::set(int      *format,
 
 status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
-    AutoMutex lock(mLock);
-
-    status_t status = mParent->setParameters(keyValuePairs);
+    AudioParameter param = AudioParameter(keyValuePairs);
+    String8 key = String8(AudioParameter::keyRouting);
+    status_t status = 0;
+    int device;
+    if (param.getInt(key, device) == NO_ERROR) {
+        AutoMutex lock(mLock);
+        mDevice = device;
+        status = mParent->setParameters(keyValuePairs);
+    }
 
     return status;
 }

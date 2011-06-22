@@ -187,7 +187,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
             err = mALSADevice->open(&(*it), devices, mode());
             if (err) break;
             out = new AudioStreamOutALSA(this, &(*it));
-            err = out->set(format, channels, sampleRate);
+            err = out->set(format, channels, sampleRate, devices);
             break;
         }
     }
@@ -232,7 +232,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             err = mALSADevice->open(&(*it), devices, mode());
             if (err) break;
             in = new AudioStreamInALSA(this, &(*it), acoustics);
-            err = in->set(format, channels, sampleRate);
+            err = in->set(format, channels, sampleRate, devices);
             break;
         }
 
