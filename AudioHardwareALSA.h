@@ -86,6 +86,7 @@ struct alsa_device_t {
 
     status_t (*init)(alsa_device_t *, ALSAHandleList &);
     status_t (*open)(alsa_handle_t *, uint32_t, int);
+    status_t (*open_lpa)(alsa_handle_t *, uint32_t, int);
     status_t (*close)(alsa_handle_t *);
     status_t (*standby)(alsa_handle_t *);
     status_t (*route)(alsa_handle_t *, uint32_t, int);
@@ -315,6 +316,15 @@ public:
     // Returns audio input buffer size according to parameters passed or 0 if one of the
     // parameters is not supported
     virtual size_t    getInputBufferSize(uint32_t sampleRate, int format, int channels);
+
+    /** This method creates and opens the audio hardware output
+     *  session for LPA */
+    virtual AudioStreamOut* openOutputSession(
+            uint32_t devices,
+            int *format,
+            status_t *status,
+            int sessionId);
+    virtual void closeOutputSession(AudioStreamOut* out);
 
     /** This method creates and opens the audio hardware output stream */
     virtual AudioStreamOut* openOutputStream(

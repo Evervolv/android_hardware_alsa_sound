@@ -197,8 +197,45 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     return out;
 }
 
+
+AudioStreamOut *
+AudioHardwareALSA::openOutputSession(uint32_t devices,
+                                          int *format,
+                                          status_t *status,
+                                          int sessionId)
+{
+    LOGE("openOutputSession");
+    AudioStreamOutALSA *out = 0;
+    status_t err = BAD_VALUE;
+
+    if (devices & (devices - 1)) {
+        if (status) *status = err;
+        LOGE("openOutputSession called with bad devices");
+        return out;
+    }
+    // Find the appropriate alsa device
+    for(ALSAHandleList::iterator it = mDeviceList.begin();
+        it != mDeviceList.end(); ++it) {
+        if (it->useCase == ALSA_PLAYBACK_LPA) {
+            err = mALSADevice->open_lpa(&(*it), devices, mode());
+            out = new AudioStreamOutALSA(this, &(*it));
+            break;
+        }
+    }
+
+    if (status) *status = err;
+    return out;
+
+}
+
 void
 AudioHardwareALSA::closeOutputStream(AudioStreamOut* out)
+{
+    delete out;
+}
+
+void
+AudioHardwareALSA::closeOutputSession(AudioStreamOut* out)
 {
     delete out;
 }

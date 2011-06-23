@@ -26,9 +26,9 @@
 
 #define ALSA_DEVICE_DEFAULT         "hw:0,0"
 #define ALSA_DEVICE_VOICE_CALL      "hw:0,2"
+#define ALSA_DEVICE_LPA             "hw:0,4"
 #define ALSA_DEVICE_FM_RADIO_PLAY   "hw:0,5"
 #define ALSA_DEVICE_FM_RADIO_REC    "hw:0,6"
-#define ALSA_DEVICE_LPA             "hw:0,6"
 #define ALSA_DEVICE_HDMI            "hw:0,7"
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
@@ -44,6 +44,7 @@ static int      s_device_open(const hw_module_t*, const char*, hw_device_t**);
 static int      s_device_close(hw_device_t*);
 static status_t s_init(alsa_device_t *, ALSAHandleList &);
 static status_t s_open(alsa_handle_t *, uint32_t, int);
+static status_t s_open_lpa(alsa_handle_t *, uint32_t, int);
 static status_t s_close(alsa_handle_t *);
 static status_t s_standby(alsa_handle_t *);
 static status_t s_route(alsa_handle_t *, uint32_t, int);
@@ -82,6 +83,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->common.close = s_device_close;
     dev->init = s_init;
     dev->open = s_open;
+    dev->open_lpa = s_open_lpa;
     dev->close = s_close;
     dev->route = s_route;
     dev->standby = s_standby;
@@ -451,6 +453,20 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         control.set("SLIMBUS_0_RX Port Mixer INTERNAL_FM_TX", 1, 0);
     }
 
+    if(handle->useCase == ALSA_PLAYBACK_LPA) {
+        if (codecType & CODEC_ICODEC) {
+            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia3", 1, 0);
+        }
+        if (codecType & CODEC_HDMI) {
+            //TODO
+        }
+        if (codecType & CODEC_RIVA) {
+            //TODO
+        }
+
+    }
+
+
     if(handle->useCase == ALSA_PLAYBACK || handle->useCase == ALSA_RECORD) {
         if(codecType & CODEC_ICODEC) {
             control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 1, 0);
@@ -554,6 +570,18 @@ void resetRoutingControls(alsa_handle_t *handle)
         control.set("SLIMBUS_0_RX Port Mixer INTERNAL_FM_TX", 0, 0);
     }
 
+    if(handle->useCase == ALSA_PLAYBACK_LPA) {
+        if (codecType & CODEC_ICODEC) {
+            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia3", 0, 0);
+        }
+        if (codecType & CODEC_HDMI) {
+            //TODO
+        }
+        if (codecType & CODEC_RIVA) {
+            //TODO
+        }
+    }
+
     if(handle->useCase == ALSA_PLAYBACK || handle->useCase == ALSA_RECORD) {
         if(codecType & CODEC_ICODEC) {
             control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 0, 0);
@@ -648,6 +676,16 @@ static status_t s_init(alsa_device_t *module, ALSAHandleList &list)
 
         list.push_back(_defaults[i]);
     }
+
+    return NO_ERROR;
+}
+
+static status_t s_open_lpa(alsa_handle_t *handle, uint32_t devices, int mode) {
+
+    LOGV("Opening LPA playback s_open_lpa");
+    LOGE("s_open_lpa calling close");
+    s_close(handle);
+    setAlsaControls(handle, devices, mode);
 
     return NO_ERROR;
 }
