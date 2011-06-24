@@ -188,8 +188,8 @@ static alsa_handle_t _defaults[] = {
         channels    : 2,
         sampleRate  : DEFAULT_SAMPLE_RATE,
         latency     : 85333,
-        bufferSize  : 4096,
-        modPrivate  : (void *)&setAlsaControls,
+        bufferSize  : 1024,
+        modPrivate  : (void *)NULL,
     },
     {
         module      : 0,
@@ -292,8 +292,12 @@ status_t setHardwareParams(alsa_handle_t *handle)
             break;
         }
     }
-    if(handle->useCase == ALSA_VOICE_CALL || handle->useCase == ALSA_FM_RADIO) {
+    if(handle->useCase == ALSA_VOICE_CALL) {
         numPeriods = 2;
+    }
+    if(handle->useCase == ALSA_FM_RADIO) {
+        numPeriods = 4;
+        reqBuffSize = 1024;
     }
     periodSize = reqBuffSize;
     bufferSize = reqBuffSize * numPeriods;
@@ -817,7 +821,7 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
     // the device to be opened
     setAlsaControls(handle, devices, mode);
 
-    flags = PCM_OUT | PCM_MONO;
+    flags = PCM_OUT | PCM_STEREO;
     handle->handle = pcm_open(flags, (char*)ALSA_DEVICE_FM_RADIO_PLAY);
     if (!handle->handle) {
         LOGE("s_start_fm: could not open PCM device");
@@ -847,7 +851,7 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
     handle->modPrivate = (void*)handle->handle;
 
     // Open PCM capture device
-    flags = PCM_IN | PCM_MONO;
+    flags = PCM_IN | PCM_STEREO;
     handle->handle = pcm_open(flags, (char*)ALSA_DEVICE_FM_RADIO_REC);
     if (!handle->handle) {
         goto Error;
