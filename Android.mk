@@ -1,7 +1,6 @@
 # hardware/libaudio-alsa/Android.mk
 #
 # Copyright 2008 Wind River Systems
-# Copyright (c) 2011, Code Aurora Forum. All rights reserved.
 #
 
 ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
