@@ -424,8 +424,7 @@ uint32_t getNewSoundDevice(uint32_t devices)
 
     if(devices & AudioSystem::DEVICE_IN_FM_RX ||
        devices & AudioSystem::DEVICE_IN_FM_RX_A2DP ||
-       devices & AudioSystem::DEVICE_IN_VOICE_CALL ||
-       devices & AudioSystem::DEVICE_OUT_FM){
+       devices & AudioSystem::DEVICE_IN_VOICE_CALL) {
         newDevice = curSoundDevice;
     }
     if(!newDevice) {
@@ -529,11 +528,11 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
                 LOGV("Enabling HEADSET_TX");
                 control.set("SLIM TX7 MUX", "DEC5");
                 control.set("DEC5 MUX", "ADC2");
-                control.set("DEC5 Volume", "100");
+                control.set("DEC5 Volume", "0");
             } else {
                 LOGV("Enabling HANDSET_TX");
                 control.set("SLIM TX7 MUX", "DEC6");
-                control.set("DEC6 Volume", "100");
+                control.set("DEC6 Volume", "0");
                 control.set("DEC6 MUX", "ADC1");
             }
         }
@@ -545,7 +544,7 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 
             LOGV("Enabling HANDSET_TX");
             control.set("SLIM TX7 MUX", "DEC6");
-            control.set("DEC6 Volume", "100");
+            control.set("DEC6 Volume", "0");
             control.set("DEC6 MUX", "ADC1");
         }
     }
