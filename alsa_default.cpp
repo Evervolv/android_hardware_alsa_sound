@@ -20,7 +20,7 @@
 #define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <cutils/properties.h>
-
+#include <linux/ioctl.h>
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
 
@@ -268,8 +268,6 @@ const char *deviceName(uint32_t useCase)
 status_t setHardwareParams(alsa_handle_t *handle)
 {
     struct snd_pcm_hw_params *params;
-    status_t err = -1;
-
     unsigned long periodSize, bufferSize, reqBuffSize;
     unsigned int periodTime, bufferTime;
     unsigned int requestedRate = handle->sampleRate;
@@ -328,28 +326,20 @@ status_t setHardwareParams(alsa_handle_t *handle)
 
     if (param_set_hw_params(handle->handle, params)) {
         LOGE("cannot set hw params");
-        goto done;
+        return NO_INIT;
     }
     param_dump(params);
     handle->bufferSize = handle->handle->period_size;
-
-    LOGV("Buffer size: %d", (int)(handle->bufferSize));
-    LOGV("Latency: %d", (int)(handle->latency));
-    err = NO_ERROR;
-done:
-
-    return err;
+    return NO_ERROR;
 }
 
 status_t setSoftwareParams(alsa_handle_t *handle)
 {
     struct snd_pcm_sw_params* params;
     struct pcm* pcm = handle->handle;
-    int err = -1;
 
-    unsigned long bufferSize = handle->handle->buffer_size;
-    unsigned long periodSize = handle->handle->period_size;
-    unsigned long startThreshold, stopThreshold;
+    unsigned long bufferSize = pcm->buffer_size;
+    unsigned long periodSize = pcm->period_size;
 
     params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
     if (!params) {
@@ -357,34 +347,20 @@ status_t setSoftwareParams(alsa_handle_t *handle)
         return NO_INIT;
     }
 
-    if (handle->devices & AudioSystem::DEVICE_OUT_ALL) {
-        // For playback, configure ALSA to start the transfer when the
-        // buffer is full.
-        startThreshold = bufferSize - 1;
-        stopThreshold = bufferSize;
-    } else {
-        // For recording, configure ALSA to start the transfer on the
-        // first frame.
-        startThreshold = periodSize;
-        stopThreshold = bufferSize;
-    }
-
     // Get the current software parameters
     params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;
-    params->avail_min = handle->channels - 1 ? periodSize/4 : pcm->period_size/2;
-    params->start_threshold = handle->channels - 1 ? startThreshold/4 : startThreshold/2;
-    params->stop_threshold = handle->channels - 1 ? stopThreshold/4 : stopThreshold/2;
+    params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
+    params->start_threshold = handle->channels - 1 ? periodSize/2 : periodSize/4;
+    params->stop_threshold = handle->channels - 1 ? bufferSize/2 : bufferSize/4;
     params->silence_threshold = 0;
     params->silence_size = 0;
 
     if (param_set_sw_params(handle->handle, params)) {
         LOGE("cannot set sw params");
-        goto done;
+        return NO_INIT;
     }
     return NO_ERROR;
-done:
-    return err;
 }
 
 uint32_t getNewSoundDevice(uint32_t devices)
@@ -476,7 +452,6 @@ void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     }
 
     if(handle->useCase == ALSA_PLAYBACK || handle->useCase == ALSA_RECORD) {
-        // ToDo: These controls might be different if the device is HDMI
         if(codecType & CODEC_ICODEC) {
             control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 1, 0);
             control.set("MultiMedia1 Mixer SLIM_0_TX", 1, 0);
@@ -768,6 +743,11 @@ static status_t s_start_voice_call(alsa_handle_t *handle, uint32_t devices, int 
         goto Error;
     }
 
+    if (ioctl(handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        LOGE("s_start_voice_call:SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
     // Store the PCM playback device pointer in modPrivate
     handle->modPrivate = (void*)handle->handle;
 
@@ -798,6 +778,12 @@ static status_t s_start_voice_call(alsa_handle_t *handle, uint32_t devices, int 
         LOGE("s_start_voice_call: pcm_prepare failed");
         goto Error;
     }
+
+    if (ioctl(handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        LOGE("s_start_voice_call:SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
     handle->curDev = devices;
     handle->curMode = mode;
 
@@ -846,6 +832,11 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
         goto Error;
     }
 
+    if (ioctl(handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        LOGE("s_start_fm: SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
     // Store the PCM playback device pointer in modPrivate
     handle->modPrivate = (void*)handle->handle;
 
@@ -876,6 +867,12 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
         LOGE("s_start_fm: pcm_prepare failed");
         goto Error;
     }
+
+    if (ioctl(handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        LOGE("s_start_fm: SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
     handle->curDev = devices;
     handle->curMode = mode;
 
