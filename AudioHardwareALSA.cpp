@@ -145,11 +145,12 @@ void AudioHardwareALSA::doRouting(int device)
            it->curMode == AudioSystem::MODE_IN_CALL) {
             // End voice call
             mALSADevice->close(&(*it));
-        } else if(device & AudioSystem::DEVICE_OUT_FM && it->useCase == ALSA_FM_RADIO) {
+        } else if(device & AudioSystem::DEVICE_OUT_FM && it->useCase == ALSA_FM_RADIO &&
+                  !it->handle) {
             // Start FM Radio on current active device
             mALSADevice->startFm(&(*it), device, newMode);
         } else if(!(device & AudioSystem::DEVICE_OUT_FM) && it->useCase == ALSA_FM_RADIO &&
-                  !it->handle) {
+                  it->handle) {
             // Stop FM Radio
             mALSADevice->close(&(*it));
         } else {
