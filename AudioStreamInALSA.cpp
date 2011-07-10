@@ -43,6 +43,7 @@ AudioStreamInALSA::AudioStreamInALSA(AudioHardwareALSA *parent,
         AudioSystem::audio_in_acoustics audio_acoustics) :
     ALSAStreamOps(parent, handle),
     mFramesLost(0),
+    mParent(parent),
     mAcoustics(audio_acoustics)
 {
 }
@@ -71,9 +72,42 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     int n;
     status_t          err;
     size_t            read = 0;
+    char *use_case;
+    int newMode = mParent->mode();
 
     if(mHandle->handle == NULL) {
-        mHandle->module->open(mHandle, mDevice, mHandle->curMode);
+        snd_use_case_get(mHandle->uc_mgr, "_verb", (const char **)&use_case);
+        if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
+                (newMode == AudioSystem::MODE_IN_CALL)) {
+                strcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE);
+            } else if((mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) ||
+                      (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
+                strcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_FM);
+            } else {
+                strcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC);
+            }
+        } else {
+            if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
+                (newMode == AudioSystem::MODE_IN_CALL)) {
+                LOGE("Error reading: In call recording without voice call");
+                return 0;
+            } else if((mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) ||
+                      (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
+                LOGE("Error reading: FM recording without enabling FM");
+                return 0;
+            } else {
+                strcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC);
+            }
+        }
+        free(use_case);
+        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode);
+        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC)) {
+            snd_use_case_set(mHandle->uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI_REC);
+        } else {
+            snd_use_case_set(mHandle->uc_mgr, "_enamod", mHandle->useCase);
+        }
+        mHandle->module->open(mHandle, (mHandle->curDev & AudioSystem::DEVICE_IN_ALL), mHandle->curMode);
         if(mHandle->handle == NULL) {
             LOGE("read:: PCM device open failed");
             return 0;

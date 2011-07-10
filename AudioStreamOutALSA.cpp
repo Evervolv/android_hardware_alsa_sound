@@ -72,6 +72,7 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 
 ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 {
+    char *use_case;
     AutoMutex lock(mLock);
 
     LOGV("write:: buffer %p, bytes %d", buffer, bytes);
@@ -87,7 +88,20 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     int write_pending = bytes;
 
     if(mHandle->handle == NULL) {
-        mHandle->module->open(mHandle, mDevice, mHandle->curMode);
+        snd_use_case_get(mHandle->uc_mgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            strcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI);
+        } else {
+            strcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC);
+        }
+        free(use_case);
+        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode);
+        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI)) {
+            snd_use_case_set(mHandle->uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI);
+        } else {
+            snd_use_case_set(mHandle->uc_mgr, "_enamod", mHandle->useCase);
+        }
+        mHandle->module->open(mHandle, mHandle->curDev, mHandle->curMode);
         if(mHandle->handle == NULL) {
             LOGE("write:: device open failed");
             return 0;

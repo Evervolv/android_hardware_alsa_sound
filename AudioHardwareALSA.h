@@ -25,6 +25,7 @@
 extern "C" {
    #include <sound/asound.h>
    #include "alsa_audio.h"
+   #include "msm8960_use_cases.h"
 }
 
 #include <hardware/hardware.h>
@@ -34,40 +35,30 @@ namespace android
 
 class AudioHardwareALSA;
 
-#define SND_DEVICE_HANDSET          0x1
-#define SND_DEVICE_SPEAKER          0x2
-#define SND_DEVICE_HEADSET          0x4
-#define SND_DEVICE_HEADPHONE        0x8
-#define SND_DEVICE_ANC_HEADSET      0x10
-#define SND_DEVICE_ANC_HEADPHONE    0x20
-#define SND_DEVICE_BT_SCO           0x40
-#define SND_DEVICE_FM               0x80
-#define SND_DEVICE_FM_TX            0x100
-#define SND_DEVICE_HDMI             0x200
-
-#define ALSA_PLAYBACK           1
-#define ALSA_PLAYBACK_LPA       2
-#define ALSA_VOICE_CALL         3
-#define ALSA_FM_RADIO           4
-#define ALSA_RECORD             5
-#define ALSA_RECORD_FM          6
-#define ALSA_RECORD_VOICE_CALL  7
-
-#define CODEC_ICODEC            0x1
-#define CODEC_HDMI              0x2
-#define CODEC_RIVA              0x4
 /**
  * The id of ALSA module
  */
 #define ALSA_HARDWARE_MODULE_ID "alsa"
 #define ALSA_HARDWARE_NAME      "alsa"
 
+#define DEFAULT_SAMPLING_RATE 44100
+#define DEFAULT_CHANNEL_MODE  2
+#define VOICE_SAMPLING_RATE   8000
+#define VOICE_CHANNEL_MODE    1
+#define PLAYBACK_LATENCY      96000
+#define RECORD_LATENCY        250000
+#define VOICE_LATENCY         85333
+#define DEFAULT_BUFFER_SIZE   4096
+#define FM_BUFFER_SIZE        1024
+
 struct alsa_device_t;
+static int voice_call_inprogress;
+static int fm_radio_inprogress;
 
 struct alsa_handle_t {
     alsa_device_t *     module;
     uint32_t            devices;
-    uint32_t            useCase;
+    char                useCase[25];
     uint32_t            curDev;
     int                 curMode;
     struct pcm *        handle;
@@ -76,7 +67,8 @@ struct alsa_handle_t {
     uint32_t            sampleRate;
     unsigned int        latency;         // Delay in usec
     unsigned int        bufferSize;      // Size of sample buffer
-    void *              modPrivate;
+    struct pcm *        recHandle;
+    snd_use_case_mgr_t *uc_mgr;
 };
 
 typedef List<alsa_handle_t> ALSAHandleList;
@@ -86,7 +78,6 @@ struct alsa_device_t {
 
     status_t (*init)(alsa_device_t *, ALSAHandleList &);
     status_t (*open)(alsa_handle_t *, uint32_t, int);
-    status_t (*open_lpa)(alsa_handle_t *, uint32_t, int);
     status_t (*close)(alsa_handle_t *);
     status_t (*standby)(alsa_handle_t *);
     status_t (*route)(alsa_handle_t *, uint32_t, int);
@@ -136,7 +127,7 @@ public:
     ALSAStreamOps(AudioHardwareALSA *parent, alsa_handle_t *handle);
     virtual            ~ALSAStreamOps();
 
-    status_t            set(int *format, uint32_t *channels, uint32_t *rate, uint32_t devices);
+    status_t            set(int *format, uint32_t *channels, uint32_t *rate);
 
     status_t            setParameters(const String8& keyValuePairs);
     String8             getParameters(const String8& keys);
@@ -157,7 +148,6 @@ protected:
 
     Mutex                   mLock;
     bool                    mPowerLock;
-    uint32_t                mDevice;
 };
 
 // ----------------------------------------------------------------------------
@@ -274,6 +264,9 @@ private:
 
     unsigned int        mFramesLost;
     AudioSystem::audio_in_acoustics mAcoustics;
+
+protected:
+    AudioHardwareALSA *     mParent;
 };
 
 class AudioHardwareALSA : public AudioHardwareBase
@@ -318,7 +311,7 @@ public:
     virtual size_t    getInputBufferSize(uint32_t sampleRate, int format, int channels);
 
     /** This method creates and opens the audio hardware output
-     *  session for LPA */
+      *  session for LPA */
     virtual AudioStreamOut* openOutputSession(
             uint32_t devices,
             int *format,
@@ -366,6 +359,8 @@ protected:
     alsa_device_t *     mALSADevice;
 
     ALSAHandleList      mDeviceList;
+
+    snd_use_case_mgr_t *uc_mgr;
 };
 
 // ----------------------------------------------------------------------------

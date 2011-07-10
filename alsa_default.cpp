@@ -26,16 +26,14 @@
 
 #define ALSA_DEVICE_DEFAULT         "hw:0,0"
 #define ALSA_DEVICE_VOICE_CALL      "hw:0,2"
-#define ALSA_DEVICE_LPA             "hw:0,4"
 #define ALSA_DEVICE_FM_RADIO_PLAY   "hw:0,5"
 #define ALSA_DEVICE_FM_RADIO_REC    "hw:0,6"
+#define ALSA_DEVICE_LPA             "hw:0,4"
 #define ALSA_DEVICE_HDMI            "hw:0,7"
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
 #endif
-
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 namespace android
 {
@@ -44,7 +42,6 @@ static int      s_device_open(const hw_module_t*, const char*, hw_device_t**);
 static int      s_device_close(hw_device_t*);
 static status_t s_init(alsa_device_t *, ALSAHandleList &);
 static status_t s_open(alsa_handle_t *, uint32_t, int);
-static status_t s_open_lpa(alsa_handle_t *, uint32_t, int);
 static status_t s_close(alsa_handle_t *);
 static status_t s_standby(alsa_handle_t *);
 static status_t s_route(alsa_handle_t *, uint32_t, int);
@@ -83,7 +80,6 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->common.close = s_device_close;
     dev->init = s_init;
     dev->open = s_open;
-    dev->open_lpa = s_open_lpa;
     dev->close = s_close;
     dev->route = s_route;
     dev->standby = s_standby;
@@ -107,162 +103,30 @@ static int s_device_close(hw_device_t* device)
 
 static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 
-static void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
-static void resetAlsaControls(alsa_handle_t *handle);
-static void resetRoutingControls(alsa_handle_t *handle);
-static uint32_t getNewSoundDevice(uint32_t devices);
+static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
+static char *getUCMDevice(uint32_t devices);
+static void disableDevice(alsa_handle_t *handle);
 
-uint32_t curSoundDevice = 0;
-bool     curSoundDeviceActive = false;
-uint32_t numActiveUseCases = 0;
-
-#define DEVICE_OUT_SCO      (\
-        AudioSystem::DEVICE_OUT_BLUETOOTH_SCO |\
-        AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET |\
-        AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)
-
-#define DEVICE_OUT_DEFAULT   (\
-        AudioSystem::DEVICE_OUT_ALL &\
-        ~AudioSystem::DEVICE_OUT_FM)
-
-#define DEVICE_IN_DEFAULT    (\
-        AudioSystem::DEVICE_IN_ALL &\
-        ~AudioSystem::DEVICE_IN_FM_RX &\
-        ~AudioSystem::DEVICE_IN_FM_RX_A2DP &\
-        ~AudioSystem::DEVICE_IN_VOICE_CALL &\
-        ~AudioSystem::DEVICE_IN_COMMUNICATION &\
-        ~DEVICE_IN_SCO)
-
-static alsa_handle_t _defaults[] = {
-/*
-    Desriptions and expectations for how this module interprets
-    the fields of the alsa_handle_t struct
-
-        module      : pointer to a alsa_device_t struct
-        devices     : mapping Android devices to Front end devices
-        useCase     : playback/record/voice call/ .. etc
-        curDev      : current Android device used by this handle
-        curMode     : current Android mode used by this handle
-        handle      : pointer to a snd_pcm_t ALSA handle
-        format      : bit, endianess according to ALSA definitions
-        channels    : Integer number of channels
-        sampleRate  : Desired sample rate in Hz
-        latency     : Desired Delay in usec for the ALSA buffer
-        bufferSize  : Desired Number of samples for the ALSA buffer
-        modPrivate  : pointer to the function specific to this handle
-*/
-    {
-        module      : 0,
-        devices     : 0,
-        useCase     : ALSA_PLAYBACK,
-        curDev      : 0,
-        curMode     : 0,
-        handle      : 0,
-        format      : SNDRV_PCM_FORMAT_S16_LE,
-        channels    : 2,
-        sampleRate  : DEFAULT_SAMPLE_RATE,
-        latency     : 96000,
-        bufferSize  : 4096,
-        modPrivate  : (void *)&setAlsaControls,
-    },
-    {
-        module      : 0,
-        devices     : 0,
-        useCase     : ALSA_PLAYBACK_LPA,
-        curDev      : 0,
-        curMode     : 0,
-        handle      : 0,
-        format      : SNDRV_PCM_FORMAT_S16_LE,
-        channels    : 2,
-        sampleRate  : DEFAULT_SAMPLE_RATE,
-        latency     : 85333,
-        bufferSize  : 4096,
-        modPrivate  : (void *)&setAlsaControls,
-    },
-    {
-        module      : 0,
-        devices     : 0,
-        useCase     : ALSA_FM_RADIO,
-        curDev      : 0,
-        curMode     : 0,
-        handle      : 0,
-        format      : SNDRV_PCM_FORMAT_S16_LE,
-        channels    : 2,
-        sampleRate  : DEFAULT_SAMPLE_RATE,
-        latency     : 85333,
-        bufferSize  : 1024,
-        modPrivate  : (void *)NULL,
-    },
-    {
-        module      : 0,
-        devices     : AudioSystem::DEVICE_OUT_EARPIECE,
-        useCase     : ALSA_VOICE_CALL,
-        curDev      : 0,
-        curMode     : AudioSystem::MODE_NORMAL,
-        handle      : 0,
-        format      : SNDRV_PCM_FORMAT_S16_LE,
-        channels    : 1,
-        sampleRate  : 8000,
-        latency     : 85333,
-        bufferSize  : 4096,
-        modPrivate  : (void *)NULL,
-    },
-    {
-        module      : 0,
-        devices     : 0,
-        useCase     : ALSA_RECORD_FM,
-        curDev      : 0,
-        curMode     : 0,
-        handle      : 0,
-        format      : SNDRV_PCM_FORMAT_S16_LE,
-        channels    : 1,
-        sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
-        latency     : 96000,
-        bufferSize  : 4096,
-        modPrivate  : (void *)&setAlsaControls,
-    },
-    {
-        module      : 0,
-        devices     : 0,
-        useCase     : ALSA_RECORD_VOICE_CALL,
-        curDev      : 0,
-        curMode     : 0,
-        handle      : 0,
-        format      : SNDRV_PCM_FORMAT_S16_LE,
-        channels    : 1,
-        sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
-        latency     : 96000,
-        bufferSize  : 4096,
-        modPrivate  : (void *)&setAlsaControls,
-    },
-    {
-        module      : 0,
-        devices     : 0,
-        useCase     : ALSA_RECORD,
-        curDev      : 0,
-        curMode     : 0,
-        handle      : 0,
-        format      : SNDRV_PCM_FORMAT_S16_LE,
-        channels    : 1,
-        sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
-        latency     : 96000,
-        bufferSize  : 4096,
-        modPrivate  : (void *)&setAlsaControls,
-    },
-};
+uint32_t curTxSoundDevice = 0;
+uint32_t curRxSoundDevice = 0;
 
 // ----------------------------------------------------------------------------
 
-const char *deviceName(uint32_t useCase)
+const char *deviceName(char *useCase)
 {
-    if(useCase == ALSA_PLAYBACK || useCase == ALSA_RECORD) {
+    if ((!strcmp(useCase, SND_USE_CASE_VERB_HIFI)) ||
+        (!strcmp(useCase, SND_USE_CASE_VERB_HIFI_REC)) ||
+        (!strcmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)) ||
+        (!strcmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC))) {
         return ALSA_DEVICE_DEFAULT;
-    } else if(useCase == ALSA_PLAYBACK_LPA) {
+    } else if (!strcmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
         return ALSA_DEVICE_LPA;
-    } else if(useCase == ALSA_VOICE_CALL) {
+    } else if ((!strcmp(useCase, SND_USE_CASE_VERB_VOICECALL)) ||
+               (!strcmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
+               (!strcmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
         return ALSA_DEVICE_VOICE_CALL;
     } else {
-        LOGE("Unknown use case # %d", useCase);
+        LOGE("Unknown use case # %s", useCase);
     }
     return NULL;
 }
@@ -284,21 +148,18 @@ status_t setHardwareParams(alsa_handle_t *handle)
         return NO_INIT;
     }
 
-    //get the default array index
-    for (size_t i = 0; i < ARRAY_SIZE(_defaults); i++) {
-        LOGV("setHWParams: device %d bufferSize %d", _defaults[i].devices, _defaults[i].bufferSize);
-        if (_defaults[i].devices == handle->devices) {
-            reqBuffSize = _defaults[i].bufferSize;
-            break;
-        }
-    }
-    if(handle->useCase == ALSA_VOICE_CALL) {
+    LOGV("setHWParams: bufferSize %d", handle->bufferSize);
+    reqBuffSize = handle->bufferSize;
+
+    if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
         numPeriods = 2;
     }
-    if(handle->useCase == ALSA_FM_RADIO) {
+    if ((!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO))) {
         numPeriods = 4;
-        reqBuffSize = 1024;
     }
+
     periodSize = reqBuffSize;
     bufferSize = reqBuffSize * numPeriods;
     LOGV("setHardwareParams: bufferSize %d periodSize %d channels %d sampleRate %d",
@@ -365,295 +226,98 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     return NO_ERROR;
 }
 
-uint32_t getNewSoundDevice(uint32_t devices)
+void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
-    uint32_t newDevice = 0;
-    if(devices & AudioSystem::DEVICE_OUT_SPEAKER) {
-        newDevice |= SND_DEVICE_SPEAKER;
-    }
+    char *device, *curdev;
+    LOGV("%s: device %d handle->curDev %d", __FUNCTION__, devices, handle->curDev);
 
-    if(devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET ||
-       devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
-        newDevice |= SND_DEVICE_HEADSET;
-    } else if(devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
-        newDevice |= SND_DEVICE_HEADPHONE;
-    } else if(devices & AudioSystem::DEVICE_OUT_ANC_HEADSET ||
-              devices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
-        newDevice |= SND_DEVICE_ANC_HEADSET;
-    } else if(devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
-        newDevice |= SND_DEVICE_ANC_HEADPHONE;
-    }
-    if(devices == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO ||
-       devices == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
-       devices == AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
-        newDevice = SND_DEVICE_BT_SCO;
-    }
-    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL ||
-       devices & AudioSystem::DEVICE_OUT_AUX_HDMI) {
-        newDevice |= SND_DEVICE_HDMI;
-    }
-    if(devices & AudioSystem::DEVICE_OUT_EARPIECE ||
-       devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
-        newDevice |= SND_DEVICE_HANDSET;
-    }
-    if(devices & AudioSystem::DEVICE_OUT_FM_TX) {
-        newDevice |= SND_DEVICE_FM_TX;
-    }
-
-    if(devices & AudioSystem::DEVICE_IN_FM_RX ||
-       devices & AudioSystem::DEVICE_IN_FM_RX_A2DP ||
-       devices & AudioSystem::DEVICE_IN_VOICE_CALL) {
-        newDevice = curSoundDevice;
-    }
-    if(!newDevice) {
-        newDevice = curSoundDevice;
-    }
-    return newDevice;
-}
-
-uint32_t getCodecType(uint32_t soundDevice)
-{
-    uint32_t codecType = 0;
-    if(soundDevice == SND_DEVICE_HANDSET || soundDevice == SND_DEVICE_HEADSET ||
-       soundDevice == SND_DEVICE_HEADPHONE || soundDevice == SND_DEVICE_SPEAKER) {
-        codecType |= CODEC_ICODEC;
-    }
-    if(soundDevice == SND_DEVICE_HDMI) {
-        codecType |= CODEC_HDMI;
-    }
-    if(soundDevice == SND_DEVICE_FM_TX || soundDevice == SND_DEVICE_BT_SCO) {
-        codecType |= CODEC_RIVA;
-    }
-    return codecType;
-}
-
-void setAlsaControls(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
-{
-    LOGV("%s: E - handle %p useCase %d device %d", __FUNCTION__, handle, handle->useCase, devices);
-
-    ALSAControl control("/dev/snd/controlC0");
-
-    uint32_t newSoundDevice = getNewSoundDevice(devices);
-    uint32_t codecType = getCodecType(newSoundDevice);
-
-    if(handle->useCase == ALSA_VOICE_CALL) {
-        if(codecType == CODEC_ICODEC) {
-           LOGV("Enabling Mixer controls for voice call");
-           control.set("SLIM_0_RX_Voice Mixer CSVoice", 1, 0);
-           control.set("Voice_Tx Mixer SLIM_0_TX_Voice", 1, 0);
-        } else if (codecType == CODEC_RIVA) {
-           LOGV("Enabling Mixer controls for voice call over BT");
-           control.set("INTERNAL_BT_SCO_RX_Voice Mixer CSVoice",1,0);
-           control.set("Voice_Tx Mixer INTERNAL_BT_SCO_TX_Voice", 1, 0);
+    if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
+        if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+            (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
+                 devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
+                           AudioSystem::DEVICE_IN_WIRED_HEADSET);
+        } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
+                   (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
+            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                      AudioSystem::DEVICE_OUT_EARPIECE);
+        } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+            devices = devices | (AudioSystem::DEVICE_IN_DEFAULT |
+                      AudioSystem::DEVICE_OUT_SPEAKER);
+        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
+                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
+            devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
+                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
         }
     }
 
-    if(handle->useCase == ALSA_FM_RADIO) {
-        LOGV("Enabling Mixer controls for FM Raadio");
-        control.set("SLIMBUS_0_RX Port Mixer INTERNAL_FM_TX", 1, 0);
-    }
-
-    if(handle->useCase == ALSA_PLAYBACK_LPA) {
-        if (codecType & CODEC_ICODEC) {
-            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia3", 1, 0);
-        }
-        if (codecType & CODEC_HDMI) {
-            //TODO
-        }
-        if (codecType & CODEC_RIVA) {
-            //TODO
-        }
-
-    }
-
-
-    if(handle->useCase == ALSA_PLAYBACK || handle->useCase == ALSA_RECORD) {
-        if(codecType & CODEC_ICODEC) {
-            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 1, 0);
-            control.set("MultiMedia1 Mixer SLIM_0_TX", 1, 0);
-        }
-        if (codecType & CODEC_HDMI) {
-            control.set("HDMI Mixer MultiMedia1", 1, 0);
-        }
-        if (codecType & CODEC_RIVA) {
-           control.set("INTERNAL_BT_SCO_RX Audio Mixer MultiMedia1", 1, 0);
-           control.set("MultiMedia1 Mixer INTERNAL_BT_SCO_TX", 1, 0);
-        }
-    }
-
-    LOGV("setAlsaControls: curDevice %d active %d newDevice %d ",
-         curSoundDevice, curSoundDeviceActive, newSoundDevice);
-    if(!newSoundDevice || (curSoundDevice == newSoundDevice && curSoundDeviceActive)) {
-        // New device is same as current active sound device.
-        return;
-    }
-
-    curSoundDevice = newSoundDevice;
-    // Enable new sound device
-    if(newSoundDevice != 0) {
-        curSoundDeviceActive = true;
-        if (newSoundDevice & SND_DEVICE_SPEAKER) {
-            LOGV("Enabling SPEAKER_RX");
-            control.set("RX3 MIX1 INP1", "RX1");
-            control.set("RX4 MIX1 INP1", "RX2");
-            control.set("LINEOUT1 DAC Switch", 1, 0);
-            control.set("LINEOUT3 DAC Switch", 1, 0);
-            control.set("Speaker Function", "On");
-            control.set("LINEOUT1 Volume", "100");
-            control.set("LINEOUT3 Volume", "100");
-
-            LOGV("Enabling SPEAKER_TX");
-            control.set("SLIM TX1 MUX", "DEC1");
-            control.set("DEC1 MUX", "DMIC1");
-        }
-        if (newSoundDevice & SND_DEVICE_HEADSET ||
-            newSoundDevice & SND_DEVICE_HEADPHONE) {
-            LOGV("Enabling HEADSET_RX");
-            control.set("RX1 MIX1 INP1", "RX1");
-            control.set("RX2 MIX1 INP1", "RX2");
-            control.set("HPHL DAC Switch", 1, 0);
-            control.set("HPHR DAC Switch", 1, 0);
-            control.set("HPHL Volume", "100");
-            control.set("HPHR Volume", "100");
-            if(newSoundDevice & SND_DEVICE_HEADSET) {
-                LOGV("Enabling HEADSET_TX");
-                control.set("SLIM TX7 MUX", "DEC5");
-                control.set("DEC5 MUX", "ADC2");
-                control.set("DEC5 Volume", "0");
+    if ((curRxSoundDevice != (devices & AudioSystem::DEVICE_OUT_ALL)) ||
+        (curRxSoundDevice != (handle->curDev & AudioSystem::DEVICE_OUT_ALL)))  {
+        device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL);
+        if (device != NULL) {
+            if (curRxSoundDevice != 0) {
+                curdev = getUCMDevice(curRxSoundDevice);
+                if (!strcmp(device, curdev)) {
+                    LOGV("Required device is already set, ignoring device enable");
+                    snd_use_case_set(handle->uc_mgr, "_enadev", device);
+                } else {
+                    char *ident = (char *)malloc((strlen(curdev)+strlen("_swdev/")+1)*sizeof(char));
+                    strcpy(ident, "_swdev/");
+                    strcat(ident, curdev);
+                    snd_use_case_set(handle->uc_mgr, ident, device);
+                    free(ident);
+                }
+                free(curdev);
             } else {
-                LOGV("Enabling HANDSET_TX");
-                control.set("SLIM TX7 MUX", "DEC6");
-                control.set("DEC6 Volume", "0");
-                control.set("DEC6 MUX", "ADC1");
+                snd_use_case_set(handle->uc_mgr, "_enadev", device);
+            }
+            curRxSoundDevice = (devices & AudioSystem::DEVICE_OUT_ALL);
+            free(device);
+        } else if (device == 0 && handle->curDev == 0) {
+            LOGV("No valid output device, enabling current Rx device");
+            if (curRxSoundDevice != 0) {
+                curdev = getUCMDevice(curRxSoundDevice);
+                snd_use_case_set(handle->uc_mgr, "_enadev", curdev);
+                free(curdev);
             }
         }
-        if (newSoundDevice & SND_DEVICE_HANDSET) {
-            LOGV("Enabling HANDSET_RX");
-            control.set("RX1 MIX1 INP1", "RX1");
-            control.set("DAC1 Switch", 1, 0);
-            control.set("RX1 Digital Volume", "100");
-
-            LOGV("Enabling HANDSET_TX");
-            control.set("SLIM TX7 MUX", "DEC6");
-            control.set("DEC6 Volume", "0");
-            control.set("DEC6 MUX", "ADC1");
+    }
+    if ((curTxSoundDevice != (devices & AudioSystem::DEVICE_IN_ALL)) ||
+        (curTxSoundDevice != (handle->curDev & AudioSystem::DEVICE_IN_ALL))) {
+        device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL);
+        if (device != NULL) {
+            if (curTxSoundDevice != 0) {
+                curdev = getUCMDevice(curTxSoundDevice);
+                if (!strcmp(device, curdev)) {
+                    LOGV("Required device is already set, ignoring device enable");
+                    snd_use_case_set(handle->uc_mgr, "_enadev", device);
+                } else {
+                    char *ident = (char *)malloc((strlen(curdev)+strlen("_swdev/")+1)*sizeof(char));
+                    strcpy(ident, "_swdev/");
+                    strcat(ident, curdev);
+                    snd_use_case_set(handle->uc_mgr, ident, device);
+                    free(ident);
+                }
+                free(curdev);
+            } else {
+                snd_use_case_set(handle->uc_mgr, "_enadev", device);
+            }
+            curTxSoundDevice = (devices & AudioSystem::DEVICE_IN_ALL);
+            free(device);
+        } else if (device == 0 && handle->curDev == 0) {
+            LOGV("No valid output device, enabling current Tx device");
+            if (curTxSoundDevice != 0) {
+                curdev = getUCMDevice(curTxSoundDevice);
+                snd_use_case_set(handle->uc_mgr, "_enadev", curdev);
+                free(curdev);
+            }
         }
     }
-
-    handle->curDev = devices;
+    handle->curDev = (curTxSoundDevice | curRxSoundDevice);
     handle->curMode = mode;
-    LOGV("setAlsaControls: X - handle %p curDev %d curMode %d",
-         handle, handle->curDev, handle->curMode);
-}
-
-void resetRoutingControls(alsa_handle_t *handle)
-{
-    LOGV("%s: handle %p useCase %d", __FUNCTION__, handle, handle->useCase);
-
-    ALSAControl control("/dev/snd/controlC0");
-    uint32_t codecType = getCodecType(curSoundDevice);
-
-    if(handle->useCase == ALSA_VOICE_CALL) {
-        if(codecType == CODEC_ICODEC) {
-           LOGV("Disabling Mixer controls for voice call");
-           control.set("SLIM_0_RX_Voice Mixer CSVoice", 0, 0);
-           control.set("Voice_Tx Mixer SLIM_0_TX_Voice", 0, 0);
-        } else if(codecType == CODEC_RIVA) {
-           LOGV("Disabling Mixer controls for voice call over BT");
-           control.set("INTERNAL_BT_SCO_RX_Voice Mixer CSVoice",0,0);
-           control.set("Voice_Tx Mixer INTERNAL_BT_SCO_TX_Voice", 0, 0);
-        }
-    }
-
-    if(handle->useCase == ALSA_FM_RADIO) {
-        LOGV("Disabling Mixer controls for FM Radio");
-        control.set("SLIMBUS_0_RX Port Mixer INTERNAL_FM_TX", 0, 0);
-    }
-
-    if(handle->useCase == ALSA_PLAYBACK_LPA) {
-        if (codecType & CODEC_ICODEC) {
-            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia3", 0, 0);
-        }
-        if (codecType & CODEC_HDMI) {
-            //TODO
-        }
-        if (codecType & CODEC_RIVA) {
-            //TODO
-        }
-    }
-
-    if(handle->useCase == ALSA_PLAYBACK || handle->useCase == ALSA_RECORD) {
-        if(codecType & CODEC_ICODEC) {
-            control.set("SLIMBUS_0_RX Audio Mixer MultiMedia1", 0, 0);
-            control.set("MultiMedia1 Mixer SLIM_0_TX", 0, 0);
-        }
-        if (codecType & CODEC_HDMI) {
-            control.set("HDMI Mixer MultiMedia1", 0, 0);
-        }
-        if (codecType & CODEC_RIVA) {
-            control.set("INTERNAL_BT_SCO_RX Audio Mixer MultiMedia1", 0, 0);
-            control.set("MultiMedia1 Mixer INTERNAL_BT_SCO_TX", 0, 0);
-        }
-    }
-}
-
-void resetAlsaControls(alsa_handle_t *handle)
-{
-    LOGV("%s: E - handle %p useCase %d", __FUNCTION__, handle, handle->useCase);
-
-    ALSAControl control("/dev/snd/controlC0");
-
-    LOGV("resetAlsaControls: curDevice %d active %d", curSoundDevice, curSoundDeviceActive);
-
-    // Disable the current RX device
-    if(curSoundDevice != 0 && curSoundDeviceActive) {
-        curSoundDeviceActive = false;
-        if (curSoundDevice & SND_DEVICE_SPEAKER) {
-            LOGV("Disabling SPEAKER_RX");
-            control.set("RX3 MIX1 INP1", "ZERO");
-            control.set("RX4 MIX1 INP1", "ZERO");
-            control.set("LINEOUT1 DAC Switch", 0, 0);
-            control.set("LINEOUT3 DAC Switch", 0, 0);
-            control.set("Speaker Function", "Off");
-
-            LOGV("Disabling SPEAKER_TX");
-            control.set("SLIM TX1 MUX", "ZERO");
-            control.set("DEC1 MUX", "ZERO");
-        }
-        // ToDo: ANC headset/headphone/DMIC/TTY ??
-        // ToDo: We should not disable ANC Headset/Headphone even if there is no
-        // active use case.
-        if (curSoundDevice & SND_DEVICE_HEADSET ||
-            curSoundDevice & SND_DEVICE_HEADPHONE) {
-            LOGV("Disabling HEADSET_RX");
-            control.set("RX1 MIX1 INP1", "ZERO");
-            control.set("RX2 MIX1 INP1", "ZERO");
-            control.set("HPHL DAC Switch", 0, 0);
-            control.set("HPHR DAC Switch", 0, 0);
-
-            if(curSoundDevice & SND_DEVICE_HEADSET) {
-                LOGV("Disabling HEADSET_TX");
-                control.set("SLIM TX7 MUX", "ZERO");
-                control.set("DEC5 MUX", "ZERO");
-            } else {
-                LOGV("Disabling HANDSET_TX");
-                control.set("SLIM TX7 MUX", "ZERO");
-                control.set("DEC6 MUX", "ZERO");
-            }
-        }
-
-        if (curSoundDevice & SND_DEVICE_HANDSET) {
-            LOGV("Disabling HANDSET_RX");
-            control.set("RX1 MIX1 INP1", "ZERO");
-            control.set("DAC1 Switch", 0, 0);
-
-            LOGV("Disabling HANDSET_TX");
-            control.set("SLIM TX7 MUX", "ZERO");
-            control.set("DEC6 MUX", "ZERO");
-        }
-    }
-
-    LOGV("resetAlsaControls: X - handle %p curDev %d curMode %d", handle, handle->curDev, handle->curMode);
+    LOGV("switchDevice: curTxDev %d curRxDev %d", curTxSoundDevice, curRxSoundDevice);
 }
 
 // ----------------------------------------------------------------------------
@@ -663,29 +327,6 @@ static status_t s_init(alsa_device_t *module, ALSAHandleList &list)
     LOGV("s_init: Initializing devices for ALSA module");
 
     list.clear();
-
-    for (size_t i = 0; i < ARRAY_SIZE(_defaults); i++) {
-
-        unsigned long bufferSize = _defaults[i].bufferSize;
-
-        for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
-            bufferSize &= ~b;
-
-        _defaults[i].module = module;
-        _defaults[i].bufferSize = bufferSize;
-
-        list.push_back(_defaults[i]);
-    }
-
-    return NO_ERROR;
-}
-
-static status_t s_open_lpa(alsa_handle_t *handle, uint32_t devices, int mode) {
-
-    LOGV("Opening LPA playback s_open_lpa");
-    LOGE("s_open_lpa calling close");
-    s_close(handle);
-    setAlsaControls(handle, devices, mode);
 
     return NO_ERROR;
 }
@@ -697,13 +338,17 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
 
     s_close(handle);
 
+    if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
+        LOGV("s_open: Opening LPA playback");
+        return NO_ERROR;
+    }
+
     LOGV("s_open: handle %p devices 0x%x in mode %d", handle, devices, mode);
 
     const char *devName = deviceName(handle->useCase);
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
-    setAlsaControls(handle, devices, mode);
 
     // The PCM stream is opened in blocking mode, per ALSA defaults.  The
     // AudioFlinger seems to assume blocking mode too, so asynchronous mode
@@ -725,9 +370,6 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
         return NO_INIT;
     }
 
-    // Increment bnumber of  active useCases on every successful PCM device open
-    numActiveUseCases ++;
-
     handle->handle->flags = flags;
     err = setHardwareParams(handle);
 
@@ -740,6 +382,8 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
         s_standby(handle);
     }
 
+    handle->curDev = devices;
+    handle->curMode = mode;
     return NO_ERROR;
 }
 
@@ -753,7 +397,6 @@ static status_t s_start_voice_call(alsa_handle_t *handle, uint32_t devices, int 
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
-    setAlsaControls(handle, devices, mode);
 
     flags = PCM_OUT | PCM_MONO;
     handle->handle = pcm_open(flags, (char*)devName);
@@ -786,8 +429,8 @@ static status_t s_start_voice_call(alsa_handle_t *handle, uint32_t devices, int 
         goto Error;
     }
 
-    // Store the PCM playback device pointer in modPrivate
-    handle->modPrivate = (void*)handle->handle;
+    // Store the PCM playback device pointer in recHandle
+    handle->recHandle = handle->handle;
 
     // Open PCM capture device
     flags = PCM_IN | PCM_MONO;
@@ -795,8 +438,6 @@ static status_t s_start_voice_call(alsa_handle_t *handle, uint32_t devices, int 
     if (!handle->handle) {
         goto Error;
     }
-
-    numActiveUseCases ++;
 
     handle->handle->flags = flags;
     err = setHardwareParams(handle);
@@ -842,7 +483,6 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
-    setAlsaControls(handle, devices, mode);
 
     flags = PCM_OUT | PCM_STEREO;
     handle->handle = pcm_open(flags, (char*)ALSA_DEVICE_FM_RADIO_PLAY);
@@ -875,8 +515,8 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
         goto Error;
     }
 
-    // Store the PCM playback device pointer in modPrivate
-    handle->modPrivate = (void*)handle->handle;
+    // Store the PCM playback device pointer in recHandle
+    handle->recHandle = handle->handle;
 
     // Open PCM capture device
     flags = PCM_IN | PCM_STEREO;
@@ -884,8 +524,6 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
     if (!handle->handle) {
         goto Error;
     }
-
-    numActiveUseCases ++;
 
     handle->handle->flags = flags;
     err = setHardwareParams(handle);
@@ -896,7 +534,7 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
 
     err = setSoftwareParams(handle);
     if(err != NO_ERROR) {
-        LOGE("s_start_voice_call: setSoftwareParams failed");
+        LOGE("s_start_fm: setSoftwareParams failed");
         goto Error;
     }
 
@@ -937,35 +575,29 @@ static status_t s_start(alsa_handle_t *handle)
 
 static status_t s_close(alsa_handle_t *handle)
 {
+    int ret;
     status_t err = NO_ERROR;
     struct pcm *h = handle->handle;
 
     handle->handle = 0;
-    handle->curDev = 0;
-    handle->curMode = 0;
     LOGV("s_close: handle %p", handle);
 
     if (h) {
-        numActiveUseCases --;
         err = pcm_close(h);
         if(err != NO_ERROR) {
             LOGE("s_close: pcm_close failed with err %d", err);
         }
 
-        if((handle->useCase == ALSA_VOICE_CALL || handle->useCase == ALSA_FM_RADIO) &&
-           handle->modPrivate != NULL) {
-            err = pcm_close((struct pcm*)handle->modPrivate);
+        if(((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) || (!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+            (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM))) &&
+            handle->recHandle != NULL) {
+            err = pcm_close(handle->recHandle);
             if(err != NO_ERROR) {
                 LOGE("s_close: pcm_close failed with err %d", err);
             }
-            handle->modPrivate = NULL;
+            handle->recHandle = NULL;
         }
-
-        resetRoutingControls(handle);
-        // If there are no other active use cases, disable the device
-        if(!numActiveUseCases) {
-            resetAlsaControls(handle);
-        }
+        disableDevice(handle);
     }
 
     return err;
@@ -979,21 +611,17 @@ static status_t s_close(alsa_handle_t *handle)
 */
 static status_t s_standby(alsa_handle_t *handle)
 {
+    int ret;
     status_t err = NO_ERROR;
     struct pcm *h = handle->handle;
     handle->handle = 0;
     LOGV("s_standby\n");
     if (h) {
-        numActiveUseCases --;
         err = pcm_close(h);
         if(err != NO_ERROR) {
             LOGE("s_standby: pcm_close failed with err %d", err);
         }
-        resetRoutingControls(handle);
-        // If there are no other active use cases, disable the device
-        if(!numActiveUseCases) {
-            resetAlsaControls(handle);
-        }
+        disableDevice(handle);
     }
 
     return err;
@@ -1003,17 +631,116 @@ static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode)
 {
     status_t status = NO_ERROR;
 
-    LOGV("s_route: devices 0x%x in mode %d useCase %d", devices, mode, handle->useCase);
-    if (handle->handle) {
-        resetRoutingControls(handle);
-        resetAlsaControls(handle);
-        setAlsaControls(handle,devices,mode);
+    LOGV("s_route: devices 0x%x in mode %d", devices, mode);
+    switchDevice(handle, devices, mode);
+    handle->curDev = (curTxSoundDevice | curRxSoundDevice);
+    handle->curMode = mode;
+    return status;
+}
+
+static void disableDevice(alsa_handle_t *handle)
+{
+    char *curDev;
+
+    snd_use_case_get(handle->uc_mgr, "_verb", (const char **)&curDev);
+    if (curDev != NULL) {
+        if (!strcmp(curDev, handle->useCase)) {
+            snd_use_case_set(handle->uc_mgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
+        } else {
+            snd_use_case_set(handle->uc_mgr, "_dismod", handle->useCase);
+        }
+        handle->useCase[0] = 0;
     } else {
-        handle->curDev = devices;
-        handle->curMode = mode;
+        LOGE("Invalid state, no valid use case found to disable");
+    }
+    free(curDev);
+    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_OUT_ALL);
+    if (curDev != NULL)
+        snd_use_case_set(handle->uc_mgr, "_disdev", curDev);
+    free(curDev);
+    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_IN_ALL);
+    if (curDev != NULL)
+        snd_use_case_set(handle->uc_mgr, "_disdev", curDev);
+    free(curDev);
+    handle->curDev = 0;
+}
+
+char *getUCMDevice(uint32_t devices)
+{
+    if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+        ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+         (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
+        return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
+    } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+             (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
+        return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
+    } else if (devices & AudioSystem::DEVICE_OUT_EARPIECE) {
+        return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
+    } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+        return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
+    } else if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+               (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) {
+        /* TODO: Check if TTY is enabled and get the TTY mode
+         *       return different UCM device name for the
+         *       corresponding TTY mode if required
+         */
+        return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
+    } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+               (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
+        return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+    } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
+              (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
+              (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)) {
+        return strdup(SND_USE_CASE_DEV_BTSCO_RX); /* BTSCO RX*/
+    } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) ||
+               (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
+               (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
+        /* Nothing to be done, use current active device */
+        return (getUCMDevice(curRxSoundDevice));
+    } else if ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) ||
+               (devices & AudioSystem::DEVICE_OUT_AUX_HDMI)) {
+        return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
+    } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
+        return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
+    } else if (devices & AudioSystem::DEVICE_OUT_DEFAULT) {
+        return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
+    } else {
+        LOGV("No valid output device: %u", devices);
     }
 
-    return status;
+    if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+        /* TODO: Check if DMIC is enabled and return the
+         *       required UCM device name for Speaker DMIC
+         */
+        return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+    } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
+               (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
+        return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
+    } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+        return strdup(SND_USE_CASE_DEV_BTSCO_TX); /* BTSCO TX*/
+    } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
+        /* TODO: Check if DMIC is enabled and return the
+         *       required UCM device name for Handset DMIC
+         */
+        return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+    } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
+               (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
+               (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
+        /* Nothing to be done, use current active device */
+        return (getUCMDevice(curTxSoundDevice));
+    } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
+               (devices & AudioSystem::DEVICE_IN_AMBIENT) ||
+               (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||
+               (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL)) {
+        LOGI("No proper mapping found with UCM device list, setting default");
+        /* TODO: Check if DMIC is enabled and return the
+         *       required UCM device name for Handset DMIC
+         */
+        return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+    } else {
+        LOGV("No valid input device: %u", devices);
+    }
+    return NULL;
 }
 
 }
