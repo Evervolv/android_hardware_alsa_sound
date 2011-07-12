@@ -116,7 +116,9 @@ const char *deviceName(char *useCase)
 {
     if ((!strcmp(useCase, SND_USE_CASE_VERB_HIFI)) ||
         (!strcmp(useCase, SND_USE_CASE_VERB_HIFI_REC)) ||
+        (!strcmp(useCase, SND_USE_CASE_VERB_FM_REC)) ||
         (!strcmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)) ||
+        (!strcmp(useCase, SND_USE_CASE_MOD_CAPTURE_FM)) ||
         (!strcmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC))) {
         return ALSA_DEVICE_DEFAULT;
     } else if (!strcmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
@@ -727,7 +729,8 @@ char *getUCMDevice(uint32_t devices)
                (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
                (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
         /* Nothing to be done, use current active device */
-        return (getUCMDevice(curTxSoundDevice));
+        if (curTxSoundDevice)
+            return (getUCMDevice(curTxSoundDevice));
     } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
                (devices & AudioSystem::DEVICE_IN_AMBIENT) ||
                (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||

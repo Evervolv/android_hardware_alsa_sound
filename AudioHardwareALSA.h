@@ -46,7 +46,7 @@ class AudioHardwareALSA;
 #define VOICE_SAMPLING_RATE   8000
 #define VOICE_CHANNEL_MODE    1
 #define PLAYBACK_LATENCY      96000
-#define RECORD_LATENCY        250000
+#define RECORD_LATENCY        96000
 #define VOICE_LATENCY         85333
 #define DEFAULT_BUFFER_SIZE   4096
 #define FM_BUFFER_SIZE        1024

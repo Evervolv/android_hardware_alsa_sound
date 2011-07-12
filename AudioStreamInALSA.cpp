@@ -94,16 +94,16 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 return 0;
             } else if((mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) ||
                       (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
-                LOGE("Error reading: FM recording without enabling FM");
-                return 0;
+                strcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC);
             } else {
                 strcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC);
             }
         }
         free(use_case);
         mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode);
-        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC)) {
-            snd_use_case_set(mHandle->uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI_REC);
+        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC)) {
+            snd_use_case_set(mHandle->uc_mgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->uc_mgr, "_enamod", mHandle->useCase);
         }

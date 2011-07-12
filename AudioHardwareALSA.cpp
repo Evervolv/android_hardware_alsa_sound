@@ -152,6 +152,12 @@ void AudioHardwareALSA::doRouting(int device)
 {
     int newMode = mode();
 
+    if((device == AudioSystem::DEVICE_IN_VOICE_CALL) ||
+       (device == AudioSystem::DEVICE_IN_FM_RX) ||
+       (device == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
+        LOGV("Ignoring routing for FM/INCALL recording");
+        return;
+    }
     LOGV("doRouting: device %d newMode %d voice_call_inprogress %d fm_radio_inprogress %d",
           device, newMode, voice_call_inprogress, fm_radio_inprogress);
     if((newMode == AudioSystem::MODE_IN_CALL) && (voice_call_inprogress == 0)) {
@@ -481,8 +487,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             return 0;
         } else if((devices == AudioSystem::DEVICE_IN_FM_RX) ||
                   (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
-            LOGE("Error opening input stream: FM recording without enabling FM");
-            return 0;
+            strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC);
         } else {
             strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC);
         }
@@ -492,8 +497,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     mALSADevice->route(&(*it), devices, mode());
-    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC)) {
-        snd_use_case_set(uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI_REC);
+    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
+       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC)) {
+        snd_use_case_set(uc_mgr, "_verb", it->useCase);
     } else {
         snd_use_case_set(uc_mgr, "_enamod", it->useCase);
     }
