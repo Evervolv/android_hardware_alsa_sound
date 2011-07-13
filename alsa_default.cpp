@@ -104,7 +104,7 @@ static int s_device_close(hw_device_t* device)
 static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 
 static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
-static char *getUCMDevice(uint32_t devices);
+static char *getUCMDevice(uint32_t devices, int input);
 static void disableDevice(alsa_handle_t *handle);
 
 uint32_t curTxSoundDevice = 0;
@@ -257,10 +257,10 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 
     if ((curRxSoundDevice != (devices & AudioSystem::DEVICE_OUT_ALL)) ||
         (curRxSoundDevice != (handle->curDev & AudioSystem::DEVICE_OUT_ALL)))  {
-        device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL);
+        device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
         if (device != NULL) {
             if (curRxSoundDevice != 0) {
-                curdev = getUCMDevice(curRxSoundDevice);
+                curdev = getUCMDevice(curRxSoundDevice, 0);
                 if (!strcmp(device, curdev)) {
                     LOGV("Required device is already set, ignoring device enable");
                     snd_use_case_set(handle->uc_mgr, "_enadev", device);
@@ -280,7 +280,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         } else if (device == 0 && handle->curDev == 0) {
             LOGV("No valid output device, enabling current Rx device");
             if (curRxSoundDevice != 0) {
-                curdev = getUCMDevice(curRxSoundDevice);
+                curdev = getUCMDevice(curRxSoundDevice, 0);
                 snd_use_case_set(handle->uc_mgr, "_enadev", curdev);
                 free(curdev);
             }
@@ -288,10 +288,10 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     }
     if ((curTxSoundDevice != (devices & AudioSystem::DEVICE_IN_ALL)) ||
         (curTxSoundDevice != (handle->curDev & AudioSystem::DEVICE_IN_ALL))) {
-        device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL);
+        device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
         if (device != NULL) {
             if (curTxSoundDevice != 0) {
-                curdev = getUCMDevice(curTxSoundDevice);
+                curdev = getUCMDevice(curTxSoundDevice, 1);
                 if (!strcmp(device, curdev)) {
                     LOGV("Required device is already set, ignoring device enable");
                     snd_use_case_set(handle->uc_mgr, "_enadev", device);
@@ -311,7 +311,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         } else if (device == 0 && handle->curDev == 0) {
             LOGV("No valid output device, enabling current Tx device");
             if (curTxSoundDevice != 0) {
-                curdev = getUCMDevice(curTxSoundDevice);
+                curdev = getUCMDevice(curTxSoundDevice, 1);
                 snd_use_case_set(handle->uc_mgr, "_enadev", curdev);
                 free(curdev);
             }
@@ -355,7 +355,8 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
     // The PCM stream is opened in blocking mode, per ALSA defaults.  The
     // AudioFlinger seems to assume blocking mode too, so asynchronous mode
     // should not be used.
-    if(devices & AudioSystem::DEVICE_OUT_ALL) {
+    if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC))) {
         flags = PCM_OUT;
     } else {
         flags = PCM_IN;
@@ -656,92 +657,94 @@ static void disableDevice(alsa_handle_t *handle)
         LOGE("Invalid state, no valid use case found to disable");
     }
     free(curDev);
-    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_OUT_ALL);
+    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_OUT_ALL, 0);
     if (curDev != NULL)
         snd_use_case_set(handle->uc_mgr, "_disdev", curDev);
     free(curDev);
-    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_IN_ALL);
+    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_IN_ALL, 1);
     if (curDev != NULL)
         snd_use_case_set(handle->uc_mgr, "_disdev", curDev);
     free(curDev);
     handle->curDev = 0;
 }
 
-char *getUCMDevice(uint32_t devices)
+char *getUCMDevice(uint32_t devices, int input)
 {
-    if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-        ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-         (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
-        return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
-    } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-             (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
-        return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
-    } else if (devices & AudioSystem::DEVICE_OUT_EARPIECE) {
-        return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
-    } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
-        return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
-    } else if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-               (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) {
-        /* TODO: Check if TTY is enabled and get the TTY mode
-         *       return different UCM device name for the
-         *       corresponding TTY mode if required
-         */
-        return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
-    } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-               (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
-        return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
-    } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
-              (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
-              (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)) {
-        return strdup(SND_USE_CASE_DEV_BTSCO_RX); /* BTSCO RX*/
-    } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) ||
-               (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
-               (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
-        /* Nothing to be done, use current active device */
-        return (getUCMDevice(curRxSoundDevice));
-    } else if ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) ||
-               (devices & AudioSystem::DEVICE_OUT_AUX_HDMI)) {
-        return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
-    } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
-        return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
-    } else if (devices & AudioSystem::DEVICE_OUT_DEFAULT) {
-        return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
+    if (!input) {
+        if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+            ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+            (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
+            return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+                 (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
+            return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
+        } else if (devices & AudioSystem::DEVICE_OUT_EARPIECE) {
+            return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
+        } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+            return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) {
+            /* TODO: Check if TTY is enabled and get the TTY mode
+             *       return different UCM device name for the
+             *       corresponding TTY mode if required
+             */
+            return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
+            return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
+                  (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
+                  (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)) {
+            return strdup(SND_USE_CASE_DEV_BTSCO_RX); /* BTSCO RX*/
+        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) ||
+                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
+                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
+            /* Nothing to be done, use current active device */
+            return (getUCMDevice(curRxSoundDevice, 0));
+        } else if ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) ||
+                   (devices & AudioSystem::DEVICE_OUT_AUX_HDMI)) {
+            return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
+        } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
+            return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
+        } else if (devices & AudioSystem::DEVICE_OUT_DEFAULT) {
+            return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
+        } else {
+            LOGV("No valid output device: %u", devices);
+        }
     } else {
-        LOGV("No valid output device: %u", devices);
-    }
-
-    if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
-        /* TODO: Check if DMIC is enabled and return the
-         *       required UCM device name for Speaker DMIC
-         */
-        return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
-    } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
-               (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
-        return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
-    } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
-        return strdup(SND_USE_CASE_DEV_BTSCO_TX); /* BTSCO TX*/
-    } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
-        /* TODO: Check if DMIC is enabled and return the
-         *       required UCM device name for Handset DMIC
-         */
-        return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
-    } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
-               (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
-               (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
-        /* Nothing to be done, use current active device */
-        if (curTxSoundDevice)
-            return (getUCMDevice(curTxSoundDevice));
-    } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
-               (devices & AudioSystem::DEVICE_IN_AMBIENT) ||
-               (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||
-               (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL)) {
-        LOGI("No proper mapping found with UCM device list, setting default");
-        /* TODO: Check if DMIC is enabled and return the
-         *       required UCM device name for Handset DMIC
-         */
-        return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
-    } else {
-        LOGV("No valid input device: %u", devices);
+        if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+            /* TODO: Check if DMIC is enabled and return the
+             *       required UCM device name for Speaker DMIC
+             */
+            return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+        } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
+            return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
+        } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+            return strdup(SND_USE_CASE_DEV_BTSCO_TX); /* BTSCO TX*/
+        } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
+            /* TODO: Check if DMIC is enabled and return the
+             *       required UCM device name for Handset DMIC
+             */
+            return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+        } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
+                   (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
+                   (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
+            /* Nothing to be done, use current active device */
+            if (curTxSoundDevice)
+                return (getUCMDevice(curTxSoundDevice, 1));
+        } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
+                   (devices & AudioSystem::DEVICE_IN_AMBIENT) ||
+                   (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||
+                   (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL)) {
+            LOGI("No proper mapping found with UCM device list, setting default");
+            /* TODO: Check if DMIC is enabled and return the
+             *       required UCM device name for Handset DMIC
+             */
+             return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+        } else {
+            LOGV("No valid input device: %u", devices);
+        }
     }
     return NULL;
 }
