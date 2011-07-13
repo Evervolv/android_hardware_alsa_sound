@@ -412,7 +412,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     it--;
     LOGV("useCase %s", it->useCase);
     mALSADevice->route(&(*it), devices, mode());
-    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
+    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
         snd_use_case_set(uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
     } else {
         snd_use_case_set(uc_mgr, "_enamod", SND_USE_CASE_MOD_PLAY_LPA);
