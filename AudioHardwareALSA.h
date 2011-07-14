@@ -83,6 +83,8 @@ struct alsa_device_t {
     status_t (*route)(alsa_handle_t *, uint32_t, int);
     status_t (*startVoiceCall)(alsa_handle_t *, uint32_t, int);
     status_t (*startFm)(alsa_handle_t *, uint32_t, int);
+    void     (*setVoiceVolume)(int);
+    void     (*setMicMute)(int);
 };
 
 // ----------------------------------------------------------------------------
@@ -361,6 +363,8 @@ protected:
     ALSAHandleList      mDeviceList;
 
     snd_use_case_mgr_t *uc_mgr;
+
+    bool                mMicMute;
 };
 
 // ----------------------------------------------------------------------------

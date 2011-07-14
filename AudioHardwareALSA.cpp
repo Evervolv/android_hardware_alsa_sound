@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <math.h>
 
 #define LOG_TAG "AudioHardwareALSA"
 #define LOG_NDEBUG 0
@@ -107,15 +108,30 @@ status_t AudioHardwareALSA::initCheck()
     return NO_ERROR;
 }
 
-status_t AudioHardwareALSA::setVoiceVolume(float volume)
+status_t AudioHardwareALSA::setVoiceVolume(float v)
 {
-    // The voice volume is used by the VOICE_CALL audio stream.
-    return INVALID_OPERATION;
+    LOGD("setVoiceVolume(%f)\n", v);
+    if (v < 0.0) {
+        LOGW("setVoiceVolume(%f) under 0.0, assuming 0.0\n", v);
+        v = 0.0;
+    } else if (v > 1.0) {
+        LOGW("setVoiceVolume(%f) over 1.0, assuming 1.0\n", v);
+        v = 1.0;
+    }
+
+    int vol = lrint(v * 100.0);
+
+    // ToDo: Send mixer command only when voice call is active
+    if(mALSADevice) {
+        mALSADevice->setVoiceVolume(vol);
+    }
+
+    return NO_ERROR;
 }
 
 status_t AudioHardwareALSA::setMasterVolume(float volume)
 {
-    return INVALID_OPERATION;
+    return NO_ERROR;
 }
 
 status_t AudioHardwareALSA::setMode(int mode)
@@ -529,11 +545,19 @@ AudioHardwareALSA::closeInputStream(AudioStreamIn* in)
 
 status_t AudioHardwareALSA::setMicMute(bool state)
 {
-    return NO_INIT;
+    if (mMicMute != state) {
+        mMicMute = state;
+        LOGD("setMicMute: mMicMute %d", mMicMute);
+        if(mALSADevice) {
+            mALSADevice->setMicMute(state);
+        }
+    }
+    return NO_ERROR;
 }
 
 status_t AudioHardwareALSA::getMicMute(bool *state)
 {
+    *state = mMicMute;
     return NO_ERROR;
 }
 

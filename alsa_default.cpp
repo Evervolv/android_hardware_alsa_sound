@@ -47,6 +47,8 @@ static status_t s_standby(alsa_handle_t *);
 static status_t s_route(alsa_handle_t *, uint32_t, int);
 static status_t s_start_voice_call(alsa_handle_t *, uint32_t, int);
 static status_t s_start_fm(alsa_handle_t *, uint32_t, int);
+static void     s_set_voice_volume(int);
+static void     s_set_mic_mute(int);
 
 static hw_module_methods_t s_module_methods = {
     open            : s_device_open
@@ -85,6 +87,8 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->standby = s_standby;
     dev->startVoiceCall = s_start_voice_call;
     dev->startFm = s_start_fm;
+    dev->setVoiceVolume = s_set_voice_volume;
+    dev->setMicMute = s_set_mic_mute;
 
     *device = &dev->common;
 
@@ -747,6 +751,20 @@ char *getUCMDevice(uint32_t devices, int input)
         }
     }
     return NULL;
+}
+
+void s_set_voice_volume(int vol)
+{
+    LOGV("s_set_voice_volume: volume %d", vol);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("Voice Rx Volume", vol, 0);
+}
+
+void s_set_mic_mute(int state)
+{
+    LOGV("s_set_mic_mute: state %d", state);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("Voice Tx Mute", state, 0);
 }
 
 }
