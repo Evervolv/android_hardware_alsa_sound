@@ -705,8 +705,7 @@ char *getUCMDevice(uint32_t devices, int input)
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
             /* Nothing to be done, use current active device */
             return (getUCMDevice(curRxSoundDevice, 0));
-        } else if ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) ||
-                   (devices & AudioSystem::DEVICE_OUT_AUX_HDMI)) {
+        } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
         } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
             return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */

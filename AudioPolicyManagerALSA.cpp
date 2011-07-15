@@ -134,7 +134,7 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
         //FM stream to speaker.
         switch (mForceUse[AudioSystem::FOR_MEDIA]) {
         default:{
-            uint32_t device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+            uint32_t device2 = 0;
     #ifdef WITH_A2DP
             if (mA2dpOutput != 0) {
                 if (strategy == STRATEGY_SONIFICATION && !a2dpUsedForSonification()) {
@@ -152,7 +152,7 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
             }
     #endif
             if (device2 == 0) {
-                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_HDMI;
+                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
             }
             if (device2 == 0) {
                 device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE;
