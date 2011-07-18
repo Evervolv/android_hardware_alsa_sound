@@ -97,6 +97,7 @@ struct alsa_device_t {
     status_t (*startFm)(alsa_handle_t *, uint32_t, int);
     void     (*setVoiceVolume)(int);
     void     (*setMicMute)(int);
+    status_t (*setFmVolume)(int);
 };
 
 // ----------------------------------------------------------------------------
@@ -307,6 +308,7 @@ public:
      * the software mixer will emulate this capability.
      */
     virtual status_t    setMasterVolume(float volume);
+    virtual status_t    setFmVolume(float volume);
 
     /**
      * setMode is called when the audio mode changes. NORMAL mode is for

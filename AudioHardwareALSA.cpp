@@ -131,6 +131,25 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     return NO_ERROR;
 }
 
+status_t  AudioHardwareALSA::setFmVolume(float value)
+{
+    status_t status = NO_ERROR;
+
+    int vol = AudioSystem::logToLinear( value );
+
+    if (vol > 100)
+        vol = 100;
+    else if (vol < 0)
+        vol = 0;
+
+    LOGV("setFmVolume(%f)\n", value);
+    LOGV("Setting FM volume to %d (available range is 0 to 100)\n", vol);
+
+    mALSADevice->setFmVolume(vol);
+
+    return status;
+}
+
 status_t AudioHardwareALSA::setMasterVolume(float volume)
 {
     return NO_ERROR;

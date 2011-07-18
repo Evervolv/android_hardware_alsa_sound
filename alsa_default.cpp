@@ -49,6 +49,7 @@ static status_t s_start_voice_call(alsa_handle_t *, uint32_t, int);
 static status_t s_start_fm(alsa_handle_t *, uint32_t, int);
 static void     s_set_voice_volume(int);
 static void     s_set_mic_mute(int);
+static status_t s_set_fm_vol(int);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -95,6 +96,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->startFm = s_start_fm;
     dev->setVoiceVolume = s_set_voice_volume;
     dev->setMicMute = s_set_mic_mute;
+    dev->setFmVolume = s_set_fm_vol;
 
     *device = &dev->common;
 
@@ -576,6 +578,18 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
 Error:
     s_close(handle);
     return NO_INIT;
+}
+
+static status_t s_set_fm_vol(int value)
+{
+    status_t err = NO_ERROR;
+
+    if (curRxSoundDevice & AudioSystem::DEVICE_OUT_FM) {
+        ALSAControl control("/dev/snd/controlC0");
+        control.set("Internal FM RX Volume",value,0);
+    }
+
+    return err;
 }
 
 static status_t s_start(alsa_handle_t *handle)
