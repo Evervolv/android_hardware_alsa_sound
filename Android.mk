@@ -87,7 +87,8 @@ endif
 
   LOCAL_SHARED_LIBRARIES := \
     libalsa-intf \
-  	liblog
+    libcutils \
+    liblog
 
   LOCAL_MODULE:= alsa.default
 

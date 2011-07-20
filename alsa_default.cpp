@@ -50,6 +50,8 @@ static status_t s_start_fm(alsa_handle_t *, uint32_t, int);
 static void     s_set_voice_volume(int);
 static void     s_set_mic_mute(int);
 
+static char mic_type[25];
+
 static hw_module_methods_t s_module_methods = {
     open            : s_device_open
 };
@@ -69,6 +71,7 @@ extern "C" const hw_module_t HAL_MODULE_INFO_SYM = {
 static int s_device_open(const hw_module_t* module, const char* name,
         hw_device_t** device)
 {
+    char value[128];
     alsa_device_t *dev;
     dev = (alsa_device_t *) malloc(sizeof(*dev));
     if (!dev) return -ENOMEM;
@@ -92,6 +95,8 @@ static int s_device_open(const hw_module_t* module, const char* name,
 
     *device = &dev->common;
 
+    property_get("persist.audio.handset.mic",value,"0");
+    strcpy(mic_type, value);
     LOGV("ALSA module opened");
 
     return 0;
@@ -719,7 +724,11 @@ char *getUCMDevice(uint32_t devices, int input)
             /* TODO: Check if DMIC is enabled and return the
              *       required UCM device name for Speaker DMIC
              */
-            return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+            if (!strncmp(mic_type, "analog", 6)) {
+                return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+            } else {
+                return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+            }
         } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
                    (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
             return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
