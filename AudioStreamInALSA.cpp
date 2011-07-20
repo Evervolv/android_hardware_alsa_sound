@@ -100,7 +100,10 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             }
         }
         free(use_case);
-        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode);
+        if (dualmic_enabled == true) {
+            mHandle->curDev |= AudioSystem::DEVICE_IN_BACK_MIC;
+        }
+        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode, (mParent->get_tty_mode()));
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC)) {
             snd_use_case_set(mHandle->uc_mgr, "_verb", mHandle->useCase);

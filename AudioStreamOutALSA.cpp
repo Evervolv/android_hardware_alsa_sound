@@ -50,6 +50,7 @@ static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 
 AudioStreamOutALSA::AudioStreamOutALSA(AudioHardwareALSA *parent, alsa_handle_t *handle) :
     ALSAStreamOps(parent, handle),
+    mParent(parent),
     mFrameCount(0)
 {
 }
@@ -95,7 +96,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             strcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC);
         }
         free(use_case);
-        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode);
+        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode, (mParent->get_tty_mode()));
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI)) {
             snd_use_case_set(mHandle->uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI);
         } else {

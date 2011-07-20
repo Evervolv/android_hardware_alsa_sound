@@ -44,13 +44,16 @@ static status_t s_init(alsa_device_t *, ALSAHandleList &);
 static status_t s_open(alsa_handle_t *, uint32_t, int);
 static status_t s_close(alsa_handle_t *);
 static status_t s_standby(alsa_handle_t *);
-static status_t s_route(alsa_handle_t *, uint32_t, int);
+static status_t s_route(alsa_handle_t *, uint32_t, int, int);
 static status_t s_start_voice_call(alsa_handle_t *, uint32_t, int);
 static status_t s_start_fm(alsa_handle_t *, uint32_t, int);
 static void     s_set_voice_volume(int);
 static void     s_set_mic_mute(int);
 
 static char mic_type[25];
+static char curRxUCMDevice[50];
+static char curTxUCMDevice[50];
+static int fluence_mode;
 
 static hw_module_methods_t s_module_methods = {
     open            : s_device_open
@@ -97,6 +100,14 @@ static int s_device_open(const hw_module_t* module, const char* name,
 
     property_get("persist.audio.handset.mic",value,"0");
     strcpy(mic_type, value);
+    property_get("persist.audio.fluence.mode",value,"0");
+    if (!strcmp("broadside", value)) {
+        fluence_mode = FLUENCE_MODE_BROADSIDE;
+    } else {
+        fluence_mode = FLUENCE_MODE_ENDFIRE;
+    }
+    strcpy(curRxUCMDevice, "None");
+    strcpy(curTxUCMDevice, "None");
     LOGV("ALSA module opened");
 
     return 0;
@@ -118,7 +129,8 @@ static void disableDevice(alsa_handle_t *handle);
 
 uint32_t curTxSoundDevice = 0;
 uint32_t curRxSoundDevice = 0;
-
+static int tty_mode = 0;
+static int call_mode = AudioSystem::MODE_NORMAL;
 // ----------------------------------------------------------------------------
 
 const char *deviceName(char *useCase)
@@ -239,7 +251,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 
 void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
-    char *device, *curdev;
+    char *device;
     LOGV("%s: device %d handle->curDev %d", __FUNCTION__, devices, handle->curDev);
 
     if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
@@ -269,29 +281,26 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
         if (device != NULL) {
             if (curRxSoundDevice != 0) {
-                curdev = getUCMDevice(curRxSoundDevice, 0);
-                if (!strcmp(device, curdev)) {
+                if (!strcmp(device, curRxUCMDevice)) {
                     LOGV("Required device is already set, ignoring device enable");
                     snd_use_case_set(handle->uc_mgr, "_enadev", device);
                 } else {
-                    char *ident = (char *)malloc((strlen(curdev)+strlen("_swdev/")+1)*sizeof(char));
+                    char *ident = (char *)malloc((strlen(curRxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
                     strcpy(ident, "_swdev/");
-                    strcat(ident, curdev);
+                    strcat(ident, curRxUCMDevice);
                     snd_use_case_set(handle->uc_mgr, ident, device);
                     free(ident);
                 }
-                free(curdev);
             } else {
                 snd_use_case_set(handle->uc_mgr, "_enadev", device);
             }
             curRxSoundDevice = (devices & AudioSystem::DEVICE_OUT_ALL);
+            strcpy(curRxUCMDevice, device);
             free(device);
         } else if (device == 0 && handle->curDev == 0) {
             LOGV("No valid output device, enabling current Rx device");
-            if (curRxSoundDevice != 0) {
-                curdev = getUCMDevice(curRxSoundDevice, 0);
-                snd_use_case_set(handle->uc_mgr, "_enadev", curdev);
-                free(curdev);
+            if (strcmp(curRxUCMDevice, "None")) {
+                snd_use_case_set(handle->uc_mgr, "_enadev", curRxUCMDevice);
             }
         }
     }
@@ -300,35 +309,33 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
         if (device != NULL) {
             if (curTxSoundDevice != 0) {
-                curdev = getUCMDevice(curTxSoundDevice, 1);
-                if (!strcmp(device, curdev)) {
+                if (!strcmp(device, curTxUCMDevice)) {
                     LOGV("Required device is already set, ignoring device enable");
                     snd_use_case_set(handle->uc_mgr, "_enadev", device);
                 } else {
-                    char *ident = (char *)malloc((strlen(curdev)+strlen("_swdev/")+1)*sizeof(char));
+                    char *ident = (char *)malloc((strlen(curTxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
                     strcpy(ident, "_swdev/");
-                    strcat(ident, curdev);
+                    strcat(ident, curTxUCMDevice);
                     snd_use_case_set(handle->uc_mgr, ident, device);
                     free(ident);
                 }
-                free(curdev);
             } else {
                 snd_use_case_set(handle->uc_mgr, "_enadev", device);
             }
             curTxSoundDevice = (devices & AudioSystem::DEVICE_IN_ALL);
+            strcpy(curTxUCMDevice, device);
             free(device);
         } else if (device == 0 && handle->curDev == 0) {
             LOGV("No valid output device, enabling current Tx device");
-            if (curTxSoundDevice != 0) {
-                curdev = getUCMDevice(curTxSoundDevice, 1);
-                snd_use_case_set(handle->uc_mgr, "_enadev", curdev);
-                free(curdev);
+            if (strcmp(curTxUCMDevice, "None")) {
+                snd_use_case_set(handle->uc_mgr, "_enadev", curTxUCMDevice);
             }
         }
     }
     handle->curDev = (curTxSoundDevice | curRxSoundDevice);
     handle->curMode = mode;
-    LOGV("switchDevice: curTxDev %d curRxDev %d", curTxSoundDevice, curRxSoundDevice);
+    LOGV("switchDevice: curTxDev %d curRxDev %d curTxUCMDevivce %s curRxDevDevice %s",
+          curTxSoundDevice, curRxSoundDevice, curTxUCMDevice, curRxUCMDevice);
 }
 
 // ----------------------------------------------------------------------------
@@ -639,11 +646,12 @@ static status_t s_standby(alsa_handle_t *handle)
     return err;
 }
 
-static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode)
+static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode, int tty)
 {
     status_t status = NO_ERROR;
 
-    LOGV("s_route: devices 0x%x in mode %d", devices, mode);
+    LOGV("s_route: devices 0x%x in mode %d tty_mode %d", devices, mode, tty);
+    tty_mode = tty; call_mode = mode;
     switchDevice(handle, devices, mode);
     handle->curDev = (curTxSoundDevice | curRxSoundDevice);
     handle->curMode = mode;
@@ -680,7 +688,20 @@ static void disableDevice(alsa_handle_t *handle)
 char *getUCMDevice(uint32_t devices, int input)
 {
     if (!input) {
-        if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+        if ((tty_mode != TTY_OFF) &&
+            (call_mode == AudioSystem::MODE_IN_CALL) &&
+            ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) ||
+             (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+             (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
+             if (tty_mode == TTY_VCO) {
+                 return strdup(SND_USE_CASE_DEV_TTY_HEADSET_RX);
+             } else if (tty_mode == TTY_FULL) {
+                 return strdup(SND_USE_CASE_DEV_TTY_FULL_RX);
+             } else if (tty_mode == TTY_HCO) {
+                 return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
+             }
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
             ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
             return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
@@ -720,14 +741,30 @@ char *getUCMDevice(uint32_t devices, int input)
             LOGV("No valid output device: %u", devices);
         }
     } else {
-        if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
-            /* TODO: Check if DMIC is enabled and return the
-             *       required UCM device name for Speaker DMIC
-             */
+        if ((tty_mode != TTY_OFF) &&
+            (call_mode == AudioSystem::MODE_IN_CALL) &&
+            ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
+             (devices & AudioSystem::DEVICE_IN_ANC_HEADSET))) {
+             if (tty_mode == TTY_HCO) {
+                 return strdup(SND_USE_CASE_DEV_TTY_HEADSET_TX);
+             } else if (tty_mode == TTY_FULL) {
+                 return strdup(SND_USE_CASE_DEV_TTY_FULL_TX);
+             } else if (tty_mode == TTY_VCO) {
+                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+             }
+        } else if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-                return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+                if (devices & AudioSystem::DEVICE_IN_BACK_MIC) {
+                    if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
+                        return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                    } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
+                        return strdup(SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
+                    }
+                } else {
+                    return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+                }
             }
         } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
                    (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
@@ -735,9 +772,6 @@ char *getUCMDevice(uint32_t devices, int input)
         } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
             return strdup(SND_USE_CASE_DEV_BTSCO_TX); /* BTSCO TX*/
         } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
-            /* TODO: Check if DMIC is enabled and return the
-             *       required UCM device name for Handset DMIC
-             */
             return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
         } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
                    (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
@@ -750,9 +784,6 @@ char *getUCMDevice(uint32_t devices, int input)
                    (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||
                    (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL)) {
             LOGI("No proper mapping found with UCM device list, setting default");
-            /* TODO: Check if DMIC is enabled and return the
-             *       required UCM device name for Handset DMIC
-             */
              return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
         } else {
             LOGV("No valid input device: %u", devices);

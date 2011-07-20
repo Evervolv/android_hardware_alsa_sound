@@ -51,9 +51,21 @@ class AudioHardwareALSA;
 #define DEFAULT_BUFFER_SIZE   4096
 #define FM_BUFFER_SIZE        1024
 
+#define DUALMIC_KEY "dualmic_enabled"
+#define ANC_KEY "anc_enabled"
+#define TTY_MODE_KEY "tty_mode"
+#define TTY_OFF 0
+#define TTY_VCO 1
+#define TTY_HCO 2
+#define TTY_FULL 3
+
 struct alsa_device_t;
 static int voice_call_inprogress;
 static int fm_radio_inprogress;
+static bool dualmic_enabled = false;
+static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
+static uint32_t FLUENCE_MODE_BROADSIDE = 1;
+static bool anc_setting = false;
 
 struct alsa_handle_t {
     alsa_device_t *     module;
@@ -80,7 +92,7 @@ struct alsa_device_t {
     status_t (*open)(alsa_handle_t *, uint32_t, int);
     status_t (*close)(alsa_handle_t *);
     status_t (*standby)(alsa_handle_t *);
-    status_t (*route)(alsa_handle_t *, uint32_t, int);
+    status_t (*route)(alsa_handle_t *, uint32_t, int, int);
     status_t (*startVoiceCall)(alsa_handle_t *, uint32_t, int);
     status_t (*startFm)(alsa_handle_t *, uint32_t, int);
     void     (*setVoiceVolume)(int);
@@ -203,6 +215,9 @@ public:
 
 private:
     uint32_t            mFrameCount;
+
+protected:
+    AudioHardwareALSA *     mParent;
 };
 
 class AudioStreamInALSA : public AudioStreamIn, public ALSAStreamOps
@@ -350,6 +365,10 @@ public:
         return mMode;
     }
 
+    int get_tty_mode()
+    {
+        return tty_mode;
+    }
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     void                doRouting(int device);
@@ -365,6 +384,7 @@ protected:
     snd_use_case_mgr_t *uc_mgr;
 
     bool                mMicMute;
+    int tty_mode;
 };
 
 // ----------------------------------------------------------------------------
