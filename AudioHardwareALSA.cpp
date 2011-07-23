@@ -123,6 +123,11 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
 
     int vol = lrint(v * 100.0);
 
+    // Voice volume levels from android are mapped to driver volume levels as follows.
+    // 0 -> 5, 20 -> 4, 40 ->3, 60 -> 2, 80 -> 1, 100 -> 0
+    // So adjust the volume to get the correct volume index in driver
+    vol = 100 - vol;
+
     // ToDo: Send mixer command only when voice call is active
     if(mALSADevice) {
         mALSADevice->setVoiceVolume(vol);
