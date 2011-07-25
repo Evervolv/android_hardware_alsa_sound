@@ -256,82 +256,54 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     char *device;
     LOGV("%s: device %d handle->curDev %d", __FUNCTION__, devices, handle->curDev);
 
-    if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
-        if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-            (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
-                 devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
-                           AudioSystem::DEVICE_IN_WIRED_HEADSET);
-        } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
-                   (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
-            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                      AudioSystem::DEVICE_OUT_EARPIECE);
-        } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
-            devices = devices | (AudioSystem::DEVICE_IN_DEFAULT |
-                      AudioSystem::DEVICE_OUT_SPEAKER);
-        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
-                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
-                   (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
-            devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
-                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
+    device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
+    if (device != NULL) {
+        if (strcmp(curRxUCMDevice, "None")) {
+            if ((!strcmp(device, curRxUCMDevice)) && (mode != AudioSystem::MODE_IN_CALL)){
+                LOGV("Required device is already set, ignoring device enable");
+                snd_use_case_set(handle->uc_mgr, "_enadev", device);
+            } else {
+                char *ident = (char *)malloc((strlen(curRxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
+                strcpy(ident, "_swdev/");
+                strcat(ident, curRxUCMDevice);
+                snd_use_case_set(handle->uc_mgr, ident, device);
+                free(ident);
+            }
+        } else {
+            snd_use_case_set(handle->uc_mgr, "_enadev", device);
+        }
+        curRxSoundDevice = (devices & AudioSystem::DEVICE_OUT_ALL);
+        strcpy(curRxUCMDevice, device);
+        free(device);
+    } else {
+        LOGV("No valid output device, enabling current Rx device");
+        if (strcmp(curRxUCMDevice, "None")) {
+            snd_use_case_set(handle->uc_mgr, "_enadev", curRxUCMDevice);
         }
     }
-
-    if ((curRxSoundDevice != (devices & AudioSystem::DEVICE_OUT_ALL)) ||
-        (curRxSoundDevice != (handle->curDev & AudioSystem::DEVICE_OUT_ALL)))  {
-        device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
-        if (device != NULL) {
-            if (curRxSoundDevice != 0) {
-                if (!strcmp(device, curRxUCMDevice)) {
-                    LOGV("Required device is already set, ignoring device enable");
-                    snd_use_case_set(handle->uc_mgr, "_enadev", device);
-                } else {
-                    char *ident = (char *)malloc((strlen(curRxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
-                    strcpy(ident, "_swdev/");
-                    strcat(ident, curRxUCMDevice);
-                    snd_use_case_set(handle->uc_mgr, ident, device);
-                    free(ident);
-                }
-            } else {
+    device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
+    if (device != NULL) {
+       if (strcmp(curTxUCMDevice, "None")) {
+           if ((!strcmp(device, curTxUCMDevice)) && (mode != AudioSystem::MODE_IN_CALL)){
+                LOGV("Required device is already set, ignoring device enable");
                 snd_use_case_set(handle->uc_mgr, "_enadev", device);
+            } else {
+                char *ident = (char *)malloc((strlen(curTxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
+                strcpy(ident, "_swdev/");
+                strcat(ident, curTxUCMDevice);
+                snd_use_case_set(handle->uc_mgr, ident, device);
+                free(ident);
             }
-            curRxSoundDevice = (devices & AudioSystem::DEVICE_OUT_ALL);
-            strcpy(curRxUCMDevice, device);
-            free(device);
-        } else if (device == 0 && handle->curDev == 0) {
-            LOGV("No valid output device, enabling current Rx device");
-            if (strcmp(curRxUCMDevice, "None")) {
-                snd_use_case_set(handle->uc_mgr, "_enadev", curRxUCMDevice);
-            }
+        } else {
+            snd_use_case_set(handle->uc_mgr, "_enadev", device);
         }
-    }
-    if ((curTxSoundDevice != (devices & AudioSystem::DEVICE_IN_ALL)) ||
-        (curTxSoundDevice != (handle->curDev & AudioSystem::DEVICE_IN_ALL))) {
-        device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
-        if (device != NULL) {
-            if (curTxSoundDevice != 0) {
-                if (!strcmp(device, curTxUCMDevice)) {
-                    LOGV("Required device is already set, ignoring device enable");
-                    snd_use_case_set(handle->uc_mgr, "_enadev", device);
-                } else {
-                    char *ident = (char *)malloc((strlen(curTxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
-                    strcpy(ident, "_swdev/");
-                    strcat(ident, curTxUCMDevice);
-                    snd_use_case_set(handle->uc_mgr, ident, device);
-                    free(ident);
-                }
-            } else {
-                snd_use_case_set(handle->uc_mgr, "_enadev", device);
-            }
-            curTxSoundDevice = (devices & AudioSystem::DEVICE_IN_ALL);
-            strcpy(curTxUCMDevice, device);
-            free(device);
-        } else if (device == 0 && handle->curDev == 0) {
-            LOGV("No valid output device, enabling current Tx device");
-            if (strcmp(curTxUCMDevice, "None")) {
-                snd_use_case_set(handle->uc_mgr, "_enadev", curTxUCMDevice);
-            }
+        curTxSoundDevice = (devices & AudioSystem::DEVICE_IN_ALL);
+        strcpy(curTxUCMDevice, device);
+        free(device);
+    } else {
+        LOGV("No valid output device, enabling current Tx device");
+        if (strcmp(curTxUCMDevice, "None")) {
+            snd_use_case_set(handle->uc_mgr, "_enadev", curTxUCMDevice);
         }
     }
     handle->curDev = (curTxSoundDevice | curRxSoundDevice);
@@ -688,14 +660,10 @@ static void disableDevice(alsa_handle_t *handle)
         LOGE("Invalid state, no valid use case found to disable");
     }
     free(curDev);
-    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_OUT_ALL, 0);
-    if (curDev != NULL)
-        snd_use_case_set(handle->uc_mgr, "_disdev", curDev);
-    free(curDev);
-    curDev = getUCMDevice(handle->curDev & AudioSystem::DEVICE_IN_ALL, 1);
-    if (curDev != NULL)
-        snd_use_case_set(handle->uc_mgr, "_disdev", curDev);
-    free(curDev);
+    if (strcmp(curTxUCMDevice, "None"))
+        snd_use_case_set(handle->uc_mgr, "_disdev", curTxUCMDevice);
+    if (strcmp(curRxUCMDevice, "None"))
+        snd_use_case_set(handle->uc_mgr, "_disdev", curRxUCMDevice);
     handle->curDev = 0;
 }
 
@@ -786,7 +754,11 @@ char *getUCMDevice(uint32_t devices, int input)
         } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
             return strdup(SND_USE_CASE_DEV_BTSCO_TX); /* BTSCO TX*/
         } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
-            return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+            if (!strncmp(mic_type, "analog", 6)) {
+                return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+            } else {
+                return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+            }
         } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
                    (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
                    (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {

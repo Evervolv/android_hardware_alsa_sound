@@ -244,11 +244,6 @@ void AudioHardwareALSA::doRouting(int device)
         LOGV("Ignoring routing for FM/INCALL recording");
         return;
     }
-    if ((device & AudioSystem::DEVICE_IN_ALL) && (dualmic_enabled == true)) {
-        device |= AudioSystem::DEVICE_IN_BACK_MIC;
-    } else if ((device & AudioSystem::DEVICE_IN_BACK_MIC) && (dualmic_enabled == false)) {
-        device &= (~AudioSystem::DEVICE_IN_BACK_MIC);
-    }
     if (anc_setting == true) {
         LOGV("doRouting: setting anc device device %d", device);
         if (device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
@@ -277,6 +272,34 @@ void AudioHardwareALSA::doRouting(int device)
         } else if (it->devices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
             device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
         }
+    }
+    if (newMode == AudioSystem::MODE_IN_CALL) {
+        if ((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+            (device & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
+            device = device | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
+                      AudioSystem::DEVICE_IN_WIRED_HEADSET);
+        } else if ((device & AudioSystem::DEVICE_OUT_EARPIECE) ||
+                  (device & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
+            device = device | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                      AudioSystem::DEVICE_OUT_EARPIECE);
+        } else if (device & AudioSystem::DEVICE_OUT_SPEAKER) {
+            device = device | (AudioSystem::DEVICE_IN_DEFAULT |
+                       AudioSystem::DEVICE_OUT_SPEAKER);
+        } else if ((device & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
+                   (device & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
+                   (device & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
+            device = device | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
+                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
+        } else if ((device & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+                   (device & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
+            device = device | (AudioSystem::DEVICE_OUT_ANC_HEADSET |
+                      AudioSystem::DEVICE_IN_ANC_HEADSET);
+        }
+    }
+    if ((device & AudioSystem::DEVICE_IN_ALL) && (dualmic_enabled == true)) {
+        device |= AudioSystem::DEVICE_IN_BACK_MIC;
+    } else if ((device & AudioSystem::DEVICE_IN_BACK_MIC) && (dualmic_enabled == false)) {
+        device &= (~AudioSystem::DEVICE_IN_BACK_MIC);
     }
     LOGV("doRouting: device %d newMode %d voice_call_inprogress %d fm_radio_inprogress %d",
           device, newMode, voice_call_inprogress, fm_radio_inprogress);
@@ -403,9 +426,12 @@ void AudioHardwareALSA::doRouting(int device)
         }
         fm_radio_inprogress = 0;
     } else {
-        for(ALSAHandleList::iterator it = mDeviceList.begin();
-            it != mDeviceList.end(); ++it) {
-            mALSADevice->route(&(*it), (uint32_t)device, newMode, tty_mode);
+        ALSAHandleList::iterator it = mDeviceList.end();
+        it--;
+        mALSADevice->route(&(*it), (uint32_t)device, newMode, tty_mode);
+        for(ALSAHandleList::iterator handle = mDeviceList.begin();
+            handle != mDeviceList.end(); ++handle) {
+            handle->curDev = it->curDev;
         }
     }
 }
