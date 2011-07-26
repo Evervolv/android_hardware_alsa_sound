@@ -556,10 +556,8 @@ static status_t s_set_fm_vol(int value)
 {
     status_t err = NO_ERROR;
 
-    if (curRxSoundDevice & AudioSystem::DEVICE_OUT_FM) {
-        ALSAControl control("/dev/snd/controlC0");
-        control.set("Internal FM RX Volume",value,0);
-    }
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("Internal FM RX Volume",value,0);
 
     return err;
 }
