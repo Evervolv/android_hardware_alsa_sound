@@ -688,6 +688,10 @@ char *getUCMDevice(uint32_t devices, int input)
             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
             return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+            ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+            (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
+            return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
                  (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
             return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
         } else if (devices & AudioSystem::DEVICE_OUT_EARPIECE) {
