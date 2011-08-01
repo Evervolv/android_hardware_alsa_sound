@@ -94,6 +94,7 @@ struct alsa_device_t {
     void     (*setMicMute)(int);
     status_t (*setFmVolume)(int);
     void     (*setBtscoRate)(int);
+    status_t (*setLpaVolume)(int);
 };
 
 // ----------------------------------------------------------------------------

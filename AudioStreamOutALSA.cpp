@@ -68,7 +68,25 @@ uint32_t AudioStreamOutALSA::channels() const
 
 status_t AudioStreamOutALSA::setVolume(float left, float right)
 {
-    return INVALID_OPERATION;//mixer()->setVolume (mHandle->curDev, left, right);
+    int lpa_vol;
+    float volume;
+    status_t status = NO_ERROR;
+
+    if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
+       !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) {
+        volume = (left + right) / 2;
+        lpa_vol = AudioSystem::logToLinear(volume);
+        if (lpa_vol > 100)
+            lpa_vol = 100;
+        else if (lpa_vol < 0)
+            lpa_vol = 0;
+        LOGV("setLpaVolume(%f)\n", volume);
+        LOGV("Setting LPA volume to %d (available range is 0 to 100)\n", lpa_vol);
+        mHandle->module->setLpaVolume(lpa_vol);
+
+        return status;
+    }
+    return INVALID_OPERATION;
 }
 
 ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)

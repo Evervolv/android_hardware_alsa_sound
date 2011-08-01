@@ -53,6 +53,7 @@ static void     s_set_voice_volume(int);
 static void     s_set_mic_mute(int);
 static status_t s_set_fm_vol(int);
 static void     s_set_btsco_rate(int);
+static status_t s_set_lpa_vol(int);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -104,6 +105,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setMicMute = s_set_mic_mute;
     dev->setFmVolume = s_set_fm_vol;
     dev->setBtscoRate = s_set_btsco_rate;
+    dev->setLpaVolume = s_set_lpa_vol;
 
     *device = &dev->common;
 
@@ -570,6 +572,16 @@ static status_t s_set_fm_vol(int value)
     ALSAControl control("/dev/snd/controlC0");
     control.set("Internal FM RX Volume",value,0);
     fmVolume = value;
+
+    return err;
+}
+
+static status_t s_set_lpa_vol(int value)
+{
+    status_t err = NO_ERROR;
+
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("LPA RX Volume",value,0);
 
     return err;
 }
