@@ -68,15 +68,16 @@ AudioHardwareALSA::AudioHardwareALSA() :
         if (err == 0) {
             mALSADevice = (alsa_device_t *)device;
             mALSADevice->init(mALSADevice, mDeviceList);
-            voice_call_inprogress = 0;
-            fm_radio_inprogress = 0;
-            dualmic_enabled = false;
-            tty_mode = TTY_OFF;
-            snd_use_case_mgr_open(&uc_mgr, "snd_soc_msm");
-            if (uc_mgr < 0) {
-	        LOGE("Failed to open ucm instance: %d", errno);
+            mIsVoiceCallActive = 0;
+            mIsFmActive = 0;
+            mDmicActive = false;
+            mAncActive = false;
+            mTtyMode = TTY_OFF;
+            snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
+            if (mUcMgr < 0) {
+                LOGE("Failed to open ucm instance: %d", errno);
             } else {
-	        LOGI("ucm instance opened: %u", (unsigned)uc_mgr);
+                LOGI("ucm instance opened: %u", (unsigned)mUcMgr);
             }
         } else {
             LOGE("ALSA Module could not be opened!!!");
@@ -88,9 +89,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
 
 AudioHardwareALSA::~AudioHardwareALSA()
 {
-    if (uc_mgr != NULL) {
-        LOGV("closing ucm instance: %u", (unsigned)uc_mgr);
-        snd_use_case_mgr_close(uc_mgr);
+    if (mUcMgr != NULL) {
+        LOGV("closing ucm instance: %u", (unsigned)mUcMgr);
+        snd_use_case_mgr_close(mUcMgr);
     }
     if (mALSADevice) {
         mALSADevice->common.close(&mALSADevice->common);
@@ -183,13 +184,13 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     key = String8(TTY_MODE_KEY);
     if (param.get(key, value) == NO_ERROR) {
         if (value == "full") {
-            tty_mode = TTY_FULL;
+            mTtyMode = TTY_FULL;
         } else if (value == "hco") {
-            tty_mode = TTY_HCO;
+            mTtyMode = TTY_HCO;
         } else if (value == "vco") {
-            tty_mode = TTY_VCO;
+            mTtyMode = TTY_VCO;
         } else {
-            tty_mode = TTY_OFF;
+            mTtyMode = TTY_OFF;
         }
         if(mMode != AudioSystem::MODE_IN_CALL){
            return NO_ERROR;
@@ -201,10 +202,10 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     key = String8(DUALMIC_KEY);
     if (param.get(key, value) == NO_ERROR) {
         if (value == "true") {
-            dualmic_enabled = true;
+            mDmicActive = true;
             LOGI("DualMic feature Enabled");
         } else {
-            dualmic_enabled = false;
+            mDmicActive = false;
             LOGI("DualMic feature Disabled");
         }
         doRouting(0);
@@ -214,10 +215,10 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.get(key, value) == NO_ERROR) {
         if (value == "true") {
             LOGV("Enabling ANC setting in the setparameter\n");
-            anc_setting= true;
+            mAncActive= true;
         } else {
             LOGV("Disabling ANC setting in the setparameter\n");
-            anc_setting= false;
+            mAncActive= false;
         }
         doRouting(0);
     }
@@ -244,7 +245,7 @@ void AudioHardwareALSA::doRouting(int device)
         LOGV("Ignoring routing for FM/INCALL recording");
         return;
     }
-    if (anc_setting == true) {
+    if (mAncActive == true) {
         LOGV("doRouting: setting anc device device %d", device);
         if (device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
             device &= (~AudioSystem::DEVICE_OUT_WIRED_HEADSET);
@@ -264,7 +265,7 @@ void AudioHardwareALSA::doRouting(int device)
                 return;
             }
         }
-    } else if (anc_setting == false && device == 0){
+    } else if (mAncActive == false && device == 0){
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         if (it->devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) {
@@ -296,19 +297,19 @@ void AudioHardwareALSA::doRouting(int device)
                       AudioSystem::DEVICE_IN_ANC_HEADSET);
         }
     }
-    if ((device & AudioSystem::DEVICE_IN_ALL) && (dualmic_enabled == true)) {
+    if ((device & AudioSystem::DEVICE_IN_ALL) && (mDmicActive == true)) {
         device |= AudioSystem::DEVICE_IN_BACK_MIC;
-    } else if ((device & AudioSystem::DEVICE_IN_BACK_MIC) && (dualmic_enabled == false)) {
+    } else if ((device & AudioSystem::DEVICE_IN_BACK_MIC) && (mDmicActive == false)) {
         device &= (~AudioSystem::DEVICE_IN_BACK_MIC);
     }
-    LOGV("doRouting: device %d newMode %d voice_call_inprogress %d fm_radio_inprogress %d",
-          device, newMode, voice_call_inprogress, fm_radio_inprogress);
-    if((newMode == AudioSystem::MODE_IN_CALL) && (voice_call_inprogress == 0)) {
+    LOGV("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
+          device, newMode, mIsVoiceCallActive, mIsFmActive);
+    if((newMode == AudioSystem::MODE_IN_CALL) && (mIsVoiceCallActive == 0)) {
         // Start voice call
         unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
         alsa_handle_t alsa_handle;
         char *use_case;
-        snd_use_case_get(uc_mgr, "_verb", (const char **)&use_case);
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_VOICECALL);
         } else {
@@ -329,24 +330,24 @@ void AudioHardwareALSA::doRouting(int device)
         alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
         alsa_handle.latency = VOICE_LATENCY;
         alsa_handle.recHandle = 0;
-        alsa_handle.uc_mgr = uc_mgr;
-        voice_call_inprogress = 1;
+        alsa_handle.ucMgr = mUcMgr;
+        mIsVoiceCallActive = 1;
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         LOGV("Enabling voice call");
-        mALSADevice->route(&(*it), (uint32_t)device, newMode, tty_mode);
+        mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
         for(ALSAHandleList::iterator handle = mDeviceList.begin();
             handle != mDeviceList.end(); ++handle) {
             handle->curDev = it->curDev;
         }
         if (!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) {
-            snd_use_case_set(uc_mgr, "_verb", SND_USE_CASE_VERB_VOICECALL);
+            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_VOICECALL);
         } else {
-            snd_use_case_set(uc_mgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOICE);
+            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOICE);
         }
         mALSADevice->startVoiceCall(&(*it), it->curDev, newMode);
-    } else if(newMode == AudioSystem::MODE_NORMAL && voice_call_inprogress == 1) {
+    } else if(newMode == AudioSystem::MODE_NORMAL && mIsVoiceCallActive == 1) {
         // End voice call
         for(ALSAHandleList::iterator it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
@@ -355,7 +356,7 @@ void AudioHardwareALSA::doRouting(int device)
                 LOGV("Disabling voice call");
                 mALSADevice->close(&(*it));
                 mDeviceList.erase(it);
-                mALSADevice->route(&(*it), (uint32_t)device, newMode, tty_mode);
+                mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
                 for(ALSAHandleList::iterator handle = mDeviceList.begin();
                    handle != mDeviceList.end(); ++handle) {
                    handle->curDev = it->curDev;
@@ -363,14 +364,14 @@ void AudioHardwareALSA::doRouting(int device)
                 break;
             }
         }
-        voice_call_inprogress = 0;
-    } else if(device & AudioSystem::DEVICE_OUT_FM && fm_radio_inprogress == 0) {
+        mIsVoiceCallActive = 0;
+    } else if(device & AudioSystem::DEVICE_OUT_FM && mIsFmActive == 0) {
         // Start FM Radio on current active device
         unsigned long bufferSize = FM_BUFFER_SIZE;
         alsa_handle_t alsa_handle;
         char *use_case;
         LOGV("Start FM");
-        snd_use_case_get(uc_mgr, "_verb", (const char **)&use_case);
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DIGITAL_RADIO);
         } else {
@@ -391,23 +392,23 @@ void AudioHardwareALSA::doRouting(int device)
         alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
         alsa_handle.latency = VOICE_LATENCY;
         alsa_handle.recHandle = 0;
-        alsa_handle.uc_mgr = uc_mgr;
-        fm_radio_inprogress = 1;
+        alsa_handle.ucMgr = mUcMgr;
+        mIsFmActive = 1;
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
-        mALSADevice->route(&(*it), (uint32_t)device, newMode, tty_mode);
+        mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
         for(ALSAHandleList::iterator handle = mDeviceList.begin();
             handle != mDeviceList.end(); ++handle) {
             handle->curDev = it->curDev;
         }
         if(!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) {
-            snd_use_case_set(uc_mgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
+            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
         } else {
-            snd_use_case_set(uc_mgr, "_enamod", SND_USE_CASE_MOD_PLAY_FM);
+            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_FM);
         }
         mALSADevice->startFm(&(*it), it->curDev, newMode);
-    } else if(!(device & AudioSystem::DEVICE_OUT_FM) && fm_radio_inprogress == 1) {
+    } else if(!(device & AudioSystem::DEVICE_OUT_FM) && mIsFmActive == 1) {
         // Stop FM Radio
         LOGV("Stop FM");
         for(ALSAHandleList::iterator it = mDeviceList.begin();
@@ -416,7 +417,7 @@ void AudioHardwareALSA::doRouting(int device)
               (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
                 mALSADevice->close(&(*it));
                 mDeviceList.erase(it);
-                mALSADevice->route(&(*it), (uint32_t)device, newMode, tty_mode);
+                mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
                 for(ALSAHandleList::iterator handle = mDeviceList.begin();
                    handle != mDeviceList.end(); ++handle) {
                    handle->curDev = it->curDev;
@@ -424,11 +425,11 @@ void AudioHardwareALSA::doRouting(int device)
                 break;
             }
         }
-        fm_radio_inprogress = 0;
+        mIsFmActive = 0;
     } else {
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
-        mALSADevice->route(&(*it), (uint32_t)device, newMode, tty_mode);
+        mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
         for(ALSAHandleList::iterator handle = mDeviceList.begin();
             handle != mDeviceList.end(); ++handle) {
             handle->curDev = it->curDev;
@@ -472,10 +473,10 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
     alsa_handle.latency = PLAYBACK_LATENCY;
     alsa_handle.recHandle = 0;
-    alsa_handle.uc_mgr = uc_mgr;
+    alsa_handle.ucMgr = mUcMgr;
 
     char *use_case;
-    snd_use_case_get(uc_mgr, "_verb", (const char **)&use_case);
+    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
         strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI);
     } else {
@@ -486,11 +487,11 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     LOGV("useCase %s", it->useCase);
-    mALSADevice->route(&(*it), devices, mode(), tty_mode);
+    mALSADevice->route(&(*it), devices, mode(), mTtyMode);
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
-        snd_use_case_set(uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI);
+        snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI);
     } else {
-        snd_use_case_set(uc_mgr, "_enamod", SND_USE_CASE_MOD_PLAY_MUSIC);
+        snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_MUSIC);
     }
     err = mALSADevice->open(&(*it), it->curDev, mode());
     if (err) {
@@ -543,10 +544,10 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
     alsa_handle.latency = VOICE_LATENCY;
     alsa_handle.recHandle = 0;
-    alsa_handle.uc_mgr = uc_mgr;
+    alsa_handle.ucMgr = mUcMgr;
 
     char *use_case;
-    snd_use_case_get(uc_mgr, "_verb", (const char **)&use_case);
+    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
         strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER);
     } else {
@@ -557,11 +558,11 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     LOGV("useCase %s", it->useCase);
-    mALSADevice->route(&(*it), devices, mode(), tty_mode);
+    mALSADevice->route(&(*it), devices, mode(), mTtyMode);
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
-        snd_use_case_set(uc_mgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
+        snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
     } else {
-        snd_use_case_set(uc_mgr, "_enamod", SND_USE_CASE_MOD_PLAY_LPA);
+        snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_LPA);
     }
     err = mALSADevice->open(&(*it), devices, mode());
     out = new AudioStreamOutALSA(this, &(*it));
@@ -613,9 +614,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     alsa_handle.sampleRate = AudioRecord::DEFAULT_SAMPLE_RATE;
     alsa_handle.latency = RECORD_LATENCY;
     alsa_handle.recHandle = 0;
-    alsa_handle.uc_mgr = uc_mgr;
+    alsa_handle.ucMgr = mUcMgr;
 
-    snd_use_case_get(uc_mgr, "_verb", (const char **)&use_case);
+    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
         if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
             (newMode == AudioSystem::MODE_IN_CALL)) {
@@ -642,15 +643,15 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     mDeviceList.push_back(alsa_handle);
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
-    if (dualmic_enabled == true) {
+    if (mDmicActive == true) {
         devices |= AudioSystem::DEVICE_IN_BACK_MIC;
     }
-    mALSADevice->route(&(*it), devices, mode(), tty_mode);
+    mALSADevice->route(&(*it), devices, mode(), mTtyMode);
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
        !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC)) {
-        snd_use_case_set(uc_mgr, "_verb", it->useCase);
+        snd_use_case_set(mUcMgr, "_verb", it->useCase);
     } else {
-        snd_use_case_set(uc_mgr, "_enamod", it->useCase);
+        snd_use_case_set(mUcMgr, "_enamod", it->useCase);
     }
     if(sampleRate) {
         it->sampleRate = *sampleRate;

@@ -60,12 +60,8 @@ class AudioHardwareALSA;
 #define TTY_FULL 3
 
 struct alsa_device_t;
-static int voice_call_inprogress;
-static int fm_radio_inprogress;
-static bool dualmic_enabled = false;
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
-static bool anc_setting = false;
 
 struct alsa_handle_t {
     alsa_device_t *     module;
@@ -80,7 +76,7 @@ struct alsa_handle_t {
     unsigned int        latency;         // Delay in usec
     unsigned int        bufferSize;      // Size of sample buffer
     struct pcm *        recHandle;
-    snd_use_case_mgr_t *uc_mgr;
+    snd_use_case_mgr_t  *ucMgr;
 };
 
 typedef List<alsa_handle_t> ALSAHandleList;
@@ -367,9 +363,13 @@ public:
         return mMode;
     }
 
-    int get_tty_mode()
+    int getTtyMode()
     {
-        return tty_mode;
+        return mTtyMode;
+    }
+    int getDmicStatus()
+    {
+        return mDmicActive;
     }
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
@@ -383,10 +383,14 @@ protected:
 
     ALSAHandleList      mDeviceList;
 
-    snd_use_case_mgr_t *uc_mgr;
+    snd_use_case_mgr_t *mUcMgr;
 
     bool                mMicMute;
-    int tty_mode;
+    int mTtyMode;
+    int mIsVoiceCallActive;
+    int mIsFmActive;
+    bool mDmicActive;
+    bool mAncActive;
 };
 
 // ----------------------------------------------------------------------------

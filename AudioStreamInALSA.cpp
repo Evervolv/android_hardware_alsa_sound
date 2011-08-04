@@ -76,7 +76,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     int newMode = mParent->mode();
 
     if(mHandle->handle == NULL) {
-        snd_use_case_get(mHandle->uc_mgr, "_verb", (const char **)&use_case);
+        snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
@@ -100,15 +100,15 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             }
         }
         free(use_case);
-        if (dualmic_enabled == true) {
+        if (mParent->getDmicStatus() == true) {
             mHandle->curDev |= AudioSystem::DEVICE_IN_BACK_MIC;
         }
-        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode, (mParent->get_tty_mode()));
+        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode, (mParent->getTtyMode()));
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC)) {
-            snd_use_case_set(mHandle->uc_mgr, "_verb", mHandle->useCase);
+            snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
-            snd_use_case_set(mHandle->uc_mgr, "_enamod", mHandle->useCase);
+            snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
         }
         mHandle->module->open(mHandle, (mHandle->curDev & AudioSystem::DEVICE_IN_ALL), mHandle->curMode);
         if(mHandle->handle == NULL) {
@@ -124,7 +124,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         }
 
         n = pcm_read(mHandle->handle, buffer,
-		mHandle->handle->period_size);
+            mHandle->handle->period_size);
         LOGV("pcm_read() returned n = %d", n);
         if (n && n != -EAGAIN) {
             //Recovery part of pcm_read. TODO:split recovery.
