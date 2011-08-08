@@ -759,7 +759,15 @@ char *getUCMDevice(uint32_t devices, int input)
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-                return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+                if (devices & AudioSystem::DEVICE_IN_BACK_MIC) {
+                    if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
+                        return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                    } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
+                        return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
+                    }
+                } else {
+                    return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+                }
             }
         } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
                    (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
