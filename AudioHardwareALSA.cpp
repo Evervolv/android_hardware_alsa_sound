@@ -179,6 +179,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     String8 value;
     status_t status = NO_ERROR;
     int device;
+    int btRate;
     LOGV("setParameters() %s", keyValuePairs.string());
 
     key = String8(TTY_MODE_KEY);
@@ -226,6 +227,12 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     key = String8(AudioParameter::keyRouting);
     if (param.getInt(key, device) == NO_ERROR) {
         doRouting(device);
+        param.remove(key);
+    }
+
+    key = String8(BT_SAMPLERATE_KEY);
+    if (param.getInt(key, btRate) == NO_ERROR) {
+        mALSADevice->setBtscoRate(btRate);
         param.remove(key);
     }
 

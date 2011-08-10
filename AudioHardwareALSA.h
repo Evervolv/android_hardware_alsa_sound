@@ -54,6 +54,7 @@ class AudioHardwareALSA;
 #define DUALMIC_KEY "dualmic_enabled"
 #define ANC_KEY "anc_enabled"
 #define TTY_MODE_KEY "tty_mode"
+#define BT_SAMPLERATE_KEY "bt_samplerate"
 #define TTY_OFF 0
 #define TTY_VCO 1
 #define TTY_HCO 2
@@ -94,6 +95,7 @@ struct alsa_device_t {
     void     (*setVoiceVolume)(int);
     void     (*setMicMute)(int);
     status_t (*setFmVolume)(int);
+    void     (*setBtscoRate)(int);
 };
 
 // ----------------------------------------------------------------------------

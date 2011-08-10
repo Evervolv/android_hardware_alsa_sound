@@ -35,6 +35,8 @@
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
 #endif
 
+#define BTSCO_RATE_16KHZ 16000
+
 namespace android
 {
 
@@ -50,11 +52,14 @@ static status_t s_start_fm(alsa_handle_t *, uint32_t, int);
 static void     s_set_voice_volume(int);
 static void     s_set_mic_mute(int);
 static status_t s_set_fm_vol(int);
+static void     s_set_btsco_rate(int);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
 static char curTxUCMDevice[50];
 static int fluence_mode;
+
+static int btsco_samplerate = 8000;
 
 static hw_module_methods_t s_module_methods = {
     open            : s_device_open
@@ -97,6 +102,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setVoiceVolume = s_set_voice_volume;
     dev->setMicMute = s_set_mic_mute;
     dev->setFmVolume = s_set_fm_vol;
+    dev->setBtscoRate = s_set_btsco_rate;
 
     *device = &dev->common;
 
@@ -709,7 +715,10 @@ char *getUCMDevice(uint32_t devices, int input)
         } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)) {
-            return strdup(SND_USE_CASE_DEV_BTSCO_RX); /* BTSCO RX*/
+            if (btsco_samplerate == BTSCO_RATE_16KHZ)
+                return strdup(SND_USE_CASE_DEV_BTSCO_WB_RX); /* BTSCO RX*/
+            else
+                return strdup(SND_USE_CASE_DEV_BTSCO_NB_RX); /* BTSCO RX*/
         } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) ||
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
@@ -754,7 +763,10 @@ char *getUCMDevice(uint32_t devices, int input)
                    (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
             return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
         } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
-            return strdup(SND_USE_CASE_DEV_BTSCO_TX); /* BTSCO TX*/
+             if (btsco_samplerate == BTSCO_RATE_16KHZ)
+                 return strdup(SND_USE_CASE_DEV_BTSCO_WB_TX); /* BTSCO TX*/
+             else
+                 return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
         } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
@@ -800,6 +812,11 @@ void s_set_mic_mute(int state)
     LOGV("s_set_mic_mute: state %d", state);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voice Tx Mute", state, 0);
+}
+
+void s_set_btsco_rate(int rate)
+{
+    btsco_samplerate = rate;
 }
 
 }
