@@ -723,7 +723,7 @@ char *getUCMDevice(uint32_t devices, int input)
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
             /* Nothing to be done, use current active device */
-            return (getUCMDevice(curRxSoundDevice, 0));
+            return strdup(curRxUCMDevice);
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
         } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
@@ -785,8 +785,7 @@ char *getUCMDevice(uint32_t devices, int input)
                    (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
                    (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
             /* Nothing to be done, use current active device */
-            if (curTxSoundDevice)
-                return (getUCMDevice(curTxSoundDevice, 1));
+            return strdup(curTxUCMDevice);
         } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
                    (devices & AudioSystem::DEVICE_IN_AMBIENT) ||
                    (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||
