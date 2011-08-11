@@ -624,7 +624,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     }
 
     alsa_handle_t alsa_handle;
-    unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
+    unsigned long bufferSize = DEFAULT_IN_BUFFER_SIZE;
 
     for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
         bufferSize &= ~b;
@@ -730,8 +730,10 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
         LOGW("getInputBufferSize bad format: %d", format);
         return 0;
     }
-
-    return 4096;
+    if(sampleRate < 44100) {
+        return DEFAULT_IN_BUFFER_SIZE * channelCount;
+    }
+    return DEFAULT_IN_BUFFER_SIZE * 8;
 }
 
 }       // namespace android

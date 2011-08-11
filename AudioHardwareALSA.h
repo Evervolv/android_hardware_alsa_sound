@@ -49,6 +49,7 @@ class AudioHardwareALSA;
 #define RECORD_LATENCY        96000
 #define VOICE_LATENCY         85333
 #define DEFAULT_BUFFER_SIZE   4096
+#define DEFAULT_IN_BUFFER_SIZE   512
 #define FM_BUFFER_SIZE        1024
 
 #define DUALMIC_KEY         "dualmic_enabled"
