@@ -108,15 +108,15 @@ static int s_device_open(const hw_module_t* module, const char* name,
     *device = &dev->common;
 
     property_get("persist.audio.handset.mic",value,"0");
-    strcpy(mic_type, value);
+    strlcpy(mic_type, value, sizeof(mic_type));
     property_get("persist.audio.fluence.mode",value,"0");
     if (!strcmp("broadside", value)) {
         fluence_mode = FLUENCE_MODE_BROADSIDE;
     } else {
         fluence_mode = FLUENCE_MODE_ENDFIRE;
     }
-    strcpy(curRxUCMDevice, "None");
-    strcpy(curTxUCMDevice, "None");
+    strlcpy(curRxUCMDevice, "None", sizeof(curRxUCMDevice));
+    strlcpy(curTxUCMDevice, "None", sizeof(curTxUCMDevice));
     LOGV("ALSA module opened");
 
     return 0;
@@ -260,7 +260,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 
 void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
-    char *device;
+    char *device, ident[70];
     LOGV("%s: device %d handle->curDev %d", __FUNCTION__, devices, handle->curDev);
 
     device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
@@ -270,17 +270,15 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
                 LOGV("Required device is already set, ignoring device enable");
                 snd_use_case_set(handle->ucMgr, "_enadev", device);
             } else {
-                char *ident = (char *)malloc((strlen(curRxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
-                strcpy(ident, "_swdev/");
-                strcat(ident, curRxUCMDevice);
+                strlcpy(ident, "_swdev/", sizeof(ident));
+                strlcat(ident, curRxUCMDevice, sizeof(ident));
                 snd_use_case_set(handle->ucMgr, ident, device);
-                free(ident);
             }
         } else {
             snd_use_case_set(handle->ucMgr, "_enadev", device);
         }
         curRxSoundDevice = (devices & AudioSystem::DEVICE_OUT_ALL);
-        strcpy(curRxUCMDevice, device);
+        strlcpy(curRxUCMDevice, device, sizeof(curRxUCMDevice));
         free(device);
         if (devices & AudioSystem::DEVICE_OUT_FM)
             s_set_fm_vol(fmVolume);
@@ -292,17 +290,15 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
                 LOGV("Required device is already set, ignoring device enable");
                 snd_use_case_set(handle->ucMgr, "_enadev", device);
             } else {
-                char *ident = (char *)malloc((strlen(curTxUCMDevice)+strlen("_swdev/")+1)*sizeof(char));
-                strcpy(ident, "_swdev/");
-                strcat(ident, curTxUCMDevice);
+                strlcpy(ident, "_swdev/", sizeof(ident));
+                strlcat(ident, curTxUCMDevice, sizeof(ident));
                 snd_use_case_set(handle->ucMgr, ident, device);
-                free(ident);
             }
         } else {
             snd_use_case_set(handle->ucMgr, "_enadev", device);
         }
         curTxSoundDevice = (devices & AudioSystem::DEVICE_IN_ALL);
-        strcpy(curTxUCMDevice, device);
+        strlcpy(curTxUCMDevice, device, sizeof(curTxUCMDevice));
         free(device);
     }
     handle->curDev = (curTxSoundDevice | curRxSoundDevice);

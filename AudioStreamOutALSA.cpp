@@ -91,9 +91,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     if(mHandle->handle == NULL) {
         snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-            strcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI);
+            strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI, sizeof(mHandle->useCase));
         } else {
-            strcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC);
+            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
         }
         free(use_case);
         mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode, (mParent->getTtyMode()));

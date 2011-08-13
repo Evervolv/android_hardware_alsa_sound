@@ -80,12 +80,12 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
-                strcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE);
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(mHandle->useCase));
             } else if((mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) ||
                       (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
-                strcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_FM);
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(mHandle->useCase));
             } else {
-                strcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC);
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(mHandle->useCase));
             }
         } else {
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
@@ -94,9 +94,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 return 0;
             } else if((mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) ||
                       (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
-                strcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC);
+                strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC, sizeof(mHandle->useCase));
             } else {
-                strcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC);
+                strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(mHandle->useCase));
             }
         }
         free(use_case);

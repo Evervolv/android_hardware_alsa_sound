@@ -318,9 +318,9 @@ void AudioHardwareALSA::doRouting(int device)
         char *use_case;
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_VOICECALL);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_VOICECALL, sizeof(alsa_handle.useCase));
         } else {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOICE);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOICE, sizeof(alsa_handle.useCase));
         }
         free(use_case);
 
@@ -380,9 +380,9 @@ void AudioHardwareALSA::doRouting(int device)
         LOGV("Start FM");
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DIGITAL_RADIO);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DIGITAL_RADIO, sizeof(alsa_handle.useCase));
         } else {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_FM);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_FM, sizeof(alsa_handle.useCase));
         }
         free(use_case);
 
@@ -485,9 +485,9 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     char *use_case;
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-        strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI);
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI, sizeof(alsa_handle.useCase));
     } else {
-        strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_MUSIC);
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(alsa_handle.useCase));
     }
     free(use_case);
     mDeviceList.push_back(alsa_handle);
@@ -556,9 +556,9 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     char *use_case;
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-        strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER);
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER, sizeof(alsa_handle.useCase));
     } else {
-        strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_LPA);
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_LPA, sizeof(alsa_handle.useCase));
     }
     free(use_case);
     mDeviceList.push_back(alsa_handle);
@@ -627,12 +627,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
         if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
             (newMode == AudioSystem::MODE_IN_CALL)) {
-                strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE);
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(alsa_handle.useCase));
         } else if((devices == AudioSystem::DEVICE_IN_FM_RX) ||
                   (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
         } else {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(alsa_handle.useCase));
         }
     } else {
         if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
@@ -641,9 +641,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             return 0;
         } else if((devices == AudioSystem::DEVICE_IN_FM_RX) ||
                   (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC, sizeof(alsa_handle.useCase));
         } else {
-            strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC);
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(alsa_handle.useCase));
         }
     }
     free(use_case);
