@@ -58,6 +58,7 @@ static char mic_type[25];
 static char curRxUCMDevice[50];
 static char curTxUCMDevice[50];
 static int fluence_mode;
+static int fmVolume;
 
 static int btsco_samplerate = 8000;
 
@@ -281,11 +282,8 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         curRxSoundDevice = (devices & AudioSystem::DEVICE_OUT_ALL);
         strcpy(curRxUCMDevice, device);
         free(device);
-    } else {
-        LOGV("No valid output device, enabling current Rx device");
-        if (strcmp(curRxUCMDevice, "None")) {
-            snd_use_case_set(handle->ucMgr, "_enadev", curRxUCMDevice);
-        }
+        if (devices & AudioSystem::DEVICE_OUT_FM)
+            s_set_fm_vol(fmVolume);
     }
     device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
     if (device != NULL) {
@@ -306,11 +304,6 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         curTxSoundDevice = (devices & AudioSystem::DEVICE_IN_ALL);
         strcpy(curTxUCMDevice, device);
         free(device);
-    } else {
-        LOGV("No valid output device, enabling current Tx device");
-        if (strcmp(curTxUCMDevice, "None")) {
-            snd_use_case_set(handle->ucMgr, "_enadev", curTxUCMDevice);
-        }
     }
     handle->curDev = (curTxSoundDevice | curRxSoundDevice);
     handle->curMode = mode;
@@ -548,6 +541,7 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
         goto Error;
     }
 
+    s_set_fm_vol(fmVolume);
     handle->curDev = devices;
     handle->curMode = mode;
 
@@ -564,6 +558,7 @@ static status_t s_set_fm_vol(int value)
 
     ALSAControl control("/dev/snd/controlC0");
     control.set("Internal FM RX Volume",value,0);
+    fmVolume = value;
 
     return err;
 }
