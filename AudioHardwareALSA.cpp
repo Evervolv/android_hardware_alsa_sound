@@ -249,6 +249,18 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
     }
 
+    key = String8(WIDEVOICE_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+        bool flag = false;
+        if (value == "true") {
+            flag = true;
+        }
+        if(mALSADevice) {
+            mALSADevice->enableWideVoice(flag);
+        }
+        param.remove(key);
+    }
+
     if (param.size()) {
         status = BAD_VALUE;
     }

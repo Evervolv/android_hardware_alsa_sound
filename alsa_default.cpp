@@ -47,6 +47,7 @@ static void     s_set_mic_mute(int);
 static status_t s_set_fm_vol(int);
 static void     s_set_btsco_rate(int);
 static status_t s_set_lpa_vol(int);
+static void     s_enable_wide_voice(bool flag);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -99,6 +100,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setFmVolume = s_set_fm_vol;
     dev->setBtscoRate = s_set_btsco_rate;
     dev->setLpaVolume = s_set_lpa_vol;
+    dev->enableWideVoice = s_enable_wide_voice;
 
     *device = &dev->common;
 
@@ -860,6 +862,17 @@ void s_set_mic_mute(int state)
 void s_set_btsco_rate(int rate)
 {
     btsco_samplerate = rate;
+}
+
+void s_enable_wide_voice(bool flag)
+{
+    LOGV("s_enable_wide_voice: flag %d", flag);
+    ALSAControl control("/dev/snd/controlC0");
+    if(flag == true) {
+        control.set("Widevoice Enable", 1, 0);
+    } else {
+        control.set("Widevoice Enable", 0, 0);
+    }
 }
 
 }

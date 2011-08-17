@@ -57,6 +57,7 @@ class AudioHardwareALSA;
 #define TTY_MODE_KEY        "tty_mode"
 #define BT_SAMPLERATE_KEY   "bt_samplerate"
 #define BTHEADSET_VGS       "bt_headset_vgs"
+#define WIDEVOICE_KEY "wide_voice_enable"
 
 #define TTY_OFF 0
 #define TTY_VCO 1
@@ -98,6 +99,7 @@ struct alsa_device_t {
     status_t (*setFmVolume)(int);
     void     (*setBtscoRate)(int);
     status_t (*setLpaVolume)(int);
+    void     (*enableWideVoice)(bool);
 };
 
 // ----------------------------------------------------------------------------
