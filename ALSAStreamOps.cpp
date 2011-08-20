@@ -159,9 +159,19 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
     AutoMutex lock(mLock);
 
-    status_t status = mParent->setParameters(keyValuePairs);
+    AudioParameter param = AudioParameter(keyValuePairs);
+    String8 key = String8(AudioParameter::keyRouting);
+    int device;
+    if (param.getInt(key, device) == NO_ERROR) {
+        // Ignore routing if device is 0.
+        LOGV("setParameters(): keyRouting with device %d", device);
+        if(device) {
+            mParent->doRouting(device);
+        }
+        param.remove(key);
+    }
 
-    return status;
+    return NO_ERROR;
 }
 
 String8 ALSAStreamOps::getParameters(const String8& keys)
