@@ -77,8 +77,10 @@ static inline uint32_t popCount(uint32_t u)
 
 status_t ALSAStreamOps::set(int      *format,
                             uint32_t *channels,
-                            uint32_t *rate)
+                            uint32_t *rate,
+                            uint32_t device)
 {
+    mDevices = device;
     if (channels && *channels != 0) {
         if (mHandle->channels != popCount(*channels))
             return BAD_VALUE;
@@ -165,6 +167,7 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         LOGV("setParameters(): keyRouting with device %d", device);
+        mDevices = device;
         if(device) {
             mParent->doRouting(device);
         }
@@ -181,7 +184,7 @@ String8 ALSAStreamOps::getParameters(const String8& keys)
     String8 key = String8(AudioParameter::keyRouting);
 
     if (param.get(key, value) == NO_ERROR) {
-        param.addInt(key, (int)mHandle->curDev);
+        param.addInt(key, (int)mDevices);
     }
 
     LOGV("getParameters() %s", param.toString().string());
@@ -231,7 +234,7 @@ uint32_t ALSAStreamOps::channels() const
     unsigned int count = mHandle->channels;
     uint32_t channels = 0;
 
-    if (mHandle->curDev & AudioSystem::DEVICE_OUT_ALL)
+    if (mDevices & AudioSystem::DEVICE_OUT_ALL)
         switch(count) {
             case 4:
                 channels |= AudioSystem::CHANNEL_OUT_BACK_LEFT;
@@ -278,7 +281,7 @@ void ALSAStreamOps::close()
 status_t ALSAStreamOps::open(int mode)
 {
     LOGV("open");
-    return mParent->mALSADevice->open(mHandle, mHandle->curDev, mode);
+    return mParent->mALSADevice->open(mHandle);
 }
 
 }       // namespace android

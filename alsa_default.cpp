@@ -43,12 +43,12 @@ namespace android
 static int      s_device_open(const hw_module_t*, const char*, hw_device_t**);
 static int      s_device_close(hw_device_t*);
 static status_t s_init(alsa_device_t *, ALSAHandleList &);
-static status_t s_open(alsa_handle_t *, uint32_t, int);
+static status_t s_open(alsa_handle_t *);
 static status_t s_close(alsa_handle_t *);
 static status_t s_standby(alsa_handle_t *);
 static status_t s_route(alsa_handle_t *, uint32_t, int, int);
-static status_t s_start_voice_call(alsa_handle_t *, uint32_t, int);
-static status_t s_start_fm(alsa_handle_t *, uint32_t, int);
+static status_t s_start_voice_call(alsa_handle_t *);
+static status_t s_start_fm(alsa_handle_t *);
 static void     s_set_voice_volume(int);
 static void     s_set_mic_mute(int);
 static status_t s_set_fm_vol(int);
@@ -136,8 +136,6 @@ static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 static char *getUCMDevice(uint32_t devices, int input);
 static void disableDevice(alsa_handle_t *handle);
 
-uint32_t curTxSoundDevice = 0;
-uint32_t curRxSoundDevice = 0;
 static int ttyMode = 0;
 static int callMode = AudioSystem::MODE_NORMAL;
 // ----------------------------------------------------------------------------
@@ -261,7 +259,37 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
     char *device, ident[70];
-    LOGV("%s: device %d handle->curDev %d", __FUNCTION__, devices, handle->curDev);
+    LOGV("%s: device %d", __FUNCTION__, devices);
+
+    if (mode == AudioSystem::MODE_IN_CALL) {
+        if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+            (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
+            devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
+                      AudioSystem::DEVICE_IN_WIRED_HEADSET);
+        } else if (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
+            devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE |
+                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
+        } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
+                  (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
+            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                      AudioSystem::DEVICE_OUT_EARPIECE);
+        } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+            devices = devices | (AudioSystem::DEVICE_IN_DEFAULT |
+                       AudioSystem::DEVICE_OUT_SPEAKER);
+        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
+                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
+            devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
+                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
+        } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
+            devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADSET |
+                      AudioSystem::DEVICE_IN_ANC_HEADSET);
+        } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
+            devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
+                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
+        }
+    }
 
     device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
     if (device != NULL) {
@@ -277,7 +305,6 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         } else {
             snd_use_case_set(handle->ucMgr, "_enadev", device);
         }
-        curRxSoundDevice = (devices & AudioSystem::DEVICE_OUT_ALL);
         strlcpy(curRxUCMDevice, device, sizeof(curRxUCMDevice));
         free(device);
         if (devices & AudioSystem::DEVICE_OUT_FM)
@@ -297,14 +324,10 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         } else {
             snd_use_case_set(handle->ucMgr, "_enadev", device);
         }
-        curTxSoundDevice = (devices & AudioSystem::DEVICE_IN_ALL);
         strlcpy(curTxUCMDevice, device, sizeof(curTxUCMDevice));
         free(device);
     }
-    handle->curDev = (curTxSoundDevice | curRxSoundDevice);
-    handle->curMode = mode;
-    LOGV("switchDevice: curTxDev %d curRxDev %d curTxUCMDevivce %s curRxDevDevice %s",
-          curTxSoundDevice, curRxSoundDevice, curTxUCMDevice, curRxUCMDevice);
+    LOGV("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 }
 
 // ----------------------------------------------------------------------------
@@ -318,7 +341,7 @@ static status_t s_init(alsa_device_t *module, ALSAHandleList &list)
     return NO_ERROR;
 }
 
-static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
+static status_t s_open(alsa_handle_t *handle)
 {
     unsigned flags = 0;
     int err = NO_ERROR;
@@ -330,7 +353,7 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
         return NO_ERROR;
     }
 
-    LOGV("s_open: handle %p devices 0x%x in mode %d", handle, devices, mode);
+    LOGV("s_open: handle %p", handle);
 
     const char *devName = deviceName(handle->useCase);
 
@@ -370,17 +393,15 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
         s_standby(handle);
     }
 
-    handle->curDev = devices;
-    handle->curMode = mode;
     return NO_ERROR;
 }
 
-static status_t s_start_voice_call(alsa_handle_t *handle, uint32_t devices, int mode)
+static status_t s_start_voice_call(alsa_handle_t *handle)
 {
     unsigned flags = 0;
     int err = NO_ERROR;
 
-    LOGV("s_start_voice_call: handle %p devices 0x%x in mode %d", handle, devices, mode);
+    LOGV("s_start_voice_call: handle %p", handle);
     const char *devName = deviceName(handle->useCase);
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
@@ -451,9 +472,6 @@ static status_t s_start_voice_call(alsa_handle_t *handle, uint32_t devices, int 
         goto Error;
     }
 
-    handle->curDev = devices;
-    handle->curMode = mode;
-
     return NO_ERROR;
 
 Error:
@@ -462,12 +480,12 @@ Error:
     return NO_INIT;
 }
 
-static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
+static status_t s_start_fm(alsa_handle_t *handle)
 {
     unsigned flags = 0;
     int err = NO_ERROR;
 
-    LOGV("s_start_fm: handle %p devices 0x%x in mode %d", handle, devices, mode);
+    LOGV("s_start_fm: handle %p", handle);
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
@@ -538,9 +556,6 @@ static status_t s_start_fm(alsa_handle_t *handle, uint32_t devices, int mode)
     }
 
     s_set_fm_vol(fmVolume);
-    handle->curDev = devices;
-    handle->curMode = mode;
-
     return NO_ERROR;
 
 Error:
@@ -634,18 +649,16 @@ static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode, int t
     LOGV("s_route: devices 0x%x in mode %d ttyMode %d", devices, mode, tty);
     ttyMode = tty; callMode = mode;
     switchDevice(handle, devices, mode);
-    handle->curDev = (curTxSoundDevice | curRxSoundDevice);
-    handle->curMode = mode;
     return status;
 }
 
 static void disableDevice(alsa_handle_t *handle)
 {
-    char *curDev;
+    char *useCase;
 
-    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&curDev);
-    if (curDev != NULL) {
-        if (!strcmp(curDev, handle->useCase)) {
+    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&useCase);
+    if (useCase != NULL) {
+        if (!strcmp(useCase, handle->useCase)) {
             snd_use_case_set(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
         } else {
             snd_use_case_set(handle->ucMgr, "_dismod", handle->useCase);
@@ -654,12 +667,11 @@ static void disableDevice(alsa_handle_t *handle)
     } else {
         LOGE("Invalid state, no valid use case found to disable");
     }
-    free(curDev);
+    free(useCase);
     if (strcmp(curTxUCMDevice, "None"))
         snd_use_case_set(handle->ucMgr, "_disdev", curTxUCMDevice);
     if (strcmp(curRxUCMDevice, "None"))
         snd_use_case_set(handle->ucMgr, "_disdev", curRxUCMDevice);
-    handle->curDev = 0;
 }
 
 char *getUCMDevice(uint32_t devices, int input)

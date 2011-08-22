@@ -96,13 +96,13 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
         }
         free(use_case);
-        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode, (mParent->getTtyMode()));
+        mHandle->module->route(mHandle, mDevices, mParent->mode(), (mParent->getTtyMode()));
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI)) {
             snd_use_case_set(mHandle->ucMgr, "_verb", SND_USE_CASE_VERB_HIFI);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
         }
-        mHandle->module->open(mHandle, mHandle->curDev, mHandle->curMode);
+        mHandle->module->open(mHandle);
         if(mHandle->handle == NULL) {
             LOGE("write:: device open failed");
             return 0;
@@ -119,7 +119,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         if (n == -EBADFD) {
             // Somehow the stream is in a bad state. The driver probably
             // has a bug and snd_pcm_recover() doesn't seem to handle this.
-            mHandle->module->open(mHandle, mHandle->curDev, mHandle->curMode);
+            mHandle->module->open(mHandle);
         }
         else if (n < 0) {
             // Recovery is part of pcm_write. TODO split is later.

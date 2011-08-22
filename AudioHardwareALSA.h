@@ -68,8 +68,6 @@ struct alsa_handle_t {
     alsa_device_t *     module;
     uint32_t            devices;
     char                useCase[25];
-    uint32_t            curDev;
-    int                 curMode;
     struct pcm *        handle;
     snd_pcm_format_t    format;
     uint32_t            channels;
@@ -86,12 +84,12 @@ struct alsa_device_t {
     hw_device_t common;
 
     status_t (*init)(alsa_device_t *, ALSAHandleList &);
-    status_t (*open)(alsa_handle_t *, uint32_t, int);
+    status_t (*open)(alsa_handle_t *);
     status_t (*close)(alsa_handle_t *);
     status_t (*standby)(alsa_handle_t *);
     status_t (*route)(alsa_handle_t *, uint32_t, int, int);
-    status_t (*startVoiceCall)(alsa_handle_t *, uint32_t, int);
-    status_t (*startFm)(alsa_handle_t *, uint32_t, int);
+    status_t (*startVoiceCall)(alsa_handle_t *);
+    status_t (*startFm)(alsa_handle_t *);
     void     (*setVoiceVolume)(int);
     void     (*setMicMute)(int);
     status_t (*setFmVolume)(int);
@@ -140,7 +138,7 @@ public:
     ALSAStreamOps(AudioHardwareALSA *parent, alsa_handle_t *handle);
     virtual            ~ALSAStreamOps();
 
-    status_t            set(int *format, uint32_t *channels, uint32_t *rate);
+    status_t            set(int *format, uint32_t *channels, uint32_t *rate, uint32_t device);
 
     status_t            setParameters(const String8& keyValuePairs);
     String8             getParameters(const String8& keys);
@@ -158,6 +156,7 @@ protected:
 
     AudioHardwareALSA *     mParent;
     alsa_handle_t *         mHandle;
+    uint32_t                mDevices;
 
     Mutex                   mLock;
     bool                    mPowerLock;

@@ -101,16 +101,16 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         }
         free(use_case);
         if (mParent->getDmicStatus() == true) {
-            mHandle->curDev |= AudioSystem::DEVICE_IN_BACK_MIC;
+            mDevices |= AudioSystem::DEVICE_IN_BACK_MIC;
         }
-        mHandle->module->route(mHandle, mHandle->curDev, mHandle->curMode, (mParent->getTtyMode()));
+        mHandle->module->route(mHandle, mDevices, mParent->mode(), (mParent->getTtyMode()));
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC)) {
             snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
         }
-        mHandle->module->open(mHandle, (mHandle->curDev & AudioSystem::DEVICE_IN_ALL), mHandle->curMode);
+        mHandle->module->open(mHandle);
         if(mHandle->handle == NULL) {
             LOGE("read:: PCM device open failed");
             return 0;

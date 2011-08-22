@@ -226,7 +226,10 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8(AudioParameter::keyRouting);
     if (param.getInt(key, device) == NO_ERROR) {
-        doRouting(device);
+        // Ignore routing if device is 0.
+        if(device) {
+            doRouting(device);
+        }
         param.remove(key);
     }
 
@@ -286,6 +289,9 @@ void AudioHardwareALSA::doRouting(int device)
             (device & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
             device = device | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
                       AudioSystem::DEVICE_IN_WIRED_HEADSET);
+        } else if (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
+            device = device | (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE |
+                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if ((device & AudioSystem::DEVICE_OUT_EARPIECE) ||
                   (device & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
             device = device | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
@@ -302,9 +308,12 @@ void AudioHardwareALSA::doRouting(int device)
                    (device & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
             device = device | (AudioSystem::DEVICE_OUT_ANC_HEADSET |
                       AudioSystem::DEVICE_IN_ANC_HEADSET);
+        } else if (device & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
+            device = device | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
+                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
         }
     }
-    if ((device & AudioSystem::DEVICE_IN_ALL) && (mDmicActive == true)) {
+    if ((device & AudioSystem::DEVICE_IN_BUILTIN_MIC) && (mDmicActive == true)) {
         device |= AudioSystem::DEVICE_IN_BACK_MIC;
     } else if ((device & AudioSystem::DEVICE_IN_BACK_MIC) && (mDmicActive == false)) {
         device &= (~AudioSystem::DEVICE_IN_BACK_MIC);
@@ -329,8 +338,6 @@ void AudioHardwareALSA::doRouting(int device)
         alsa_handle.module = mALSADevice;
         alsa_handle.bufferSize = bufferSize;
         alsa_handle.devices = device;
-        alsa_handle.curDev = 0;
-        alsa_handle.curMode = newMode;
         alsa_handle.handle = 0;
         alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
         alsa_handle.channels = VOICE_CHANNEL_MODE;
@@ -344,16 +351,12 @@ void AudioHardwareALSA::doRouting(int device)
         it--;
         LOGV("Enabling voice call");
         mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
-        for(ALSAHandleList::iterator handle = mDeviceList.begin();
-            handle != mDeviceList.end(); ++handle) {
-            handle->curDev = it->curDev;
-        }
         if (!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) {
             snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_VOICECALL);
         } else {
             snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOICE);
         }
-        mALSADevice->startVoiceCall(&(*it), it->curDev, newMode);
+        mALSADevice->startVoiceCall(&(*it));
     } else if(newMode == AudioSystem::MODE_NORMAL && mIsVoiceCallActive == 1) {
         // End voice call
         for(ALSAHandleList::iterator it = mDeviceList.begin();
@@ -364,10 +367,6 @@ void AudioHardwareALSA::doRouting(int device)
                 mALSADevice->close(&(*it));
                 mDeviceList.erase(it);
                 mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
-                for(ALSAHandleList::iterator handle = mDeviceList.begin();
-                   handle != mDeviceList.end(); ++handle) {
-                   handle->curDev = it->curDev;
-                }
                 break;
             }
         }
@@ -391,8 +390,6 @@ void AudioHardwareALSA::doRouting(int device)
         alsa_handle.module = mALSADevice;
         alsa_handle.bufferSize = bufferSize;
         alsa_handle.devices = device;
-        alsa_handle.curDev = 0;
-        alsa_handle.curMode = newMode;
         alsa_handle.handle = 0;
         alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
         alsa_handle.channels = DEFAULT_CHANNEL_MODE;
@@ -405,16 +402,12 @@ void AudioHardwareALSA::doRouting(int device)
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
-        for(ALSAHandleList::iterator handle = mDeviceList.begin();
-            handle != mDeviceList.end(); ++handle) {
-            handle->curDev = it->curDev;
-        }
         if(!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) {
             snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
         } else {
             snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_FM);
         }
-        mALSADevice->startFm(&(*it), it->curDev, newMode);
+        mALSADevice->startFm(&(*it));
     } else if(!(device & AudioSystem::DEVICE_OUT_FM) && mIsFmActive == 1) {
         // Stop FM Radio
         LOGV("Stop FM");
@@ -425,10 +418,6 @@ void AudioHardwareALSA::doRouting(int device)
                 mALSADevice->close(&(*it));
                 mDeviceList.erase(it);
                 mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
-                for(ALSAHandleList::iterator handle = mDeviceList.begin();
-                   handle != mDeviceList.end(); ++handle) {
-                   handle->curDev = it->curDev;
-                }
                 break;
             }
         }
@@ -437,10 +426,6 @@ void AudioHardwareALSA::doRouting(int device)
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
-        for(ALSAHandleList::iterator handle = mDeviceList.begin();
-            handle != mDeviceList.end(); ++handle) {
-            handle->curDev = it->curDev;
-        }
     }
 }
 
@@ -472,8 +457,6 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     alsa_handle.module = mALSADevice;
     alsa_handle.bufferSize = bufferSize;
     alsa_handle.devices = devices;
-    alsa_handle.curDev = 0;
-    alsa_handle.curMode = mode();
     alsa_handle.handle = 0;
     alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
     alsa_handle.channels = DEFAULT_CHANNEL_MODE;
@@ -500,12 +483,12 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     } else {
         snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_MUSIC);
     }
-    err = mALSADevice->open(&(*it), it->curDev, mode());
+    err = mALSADevice->open(&(*it));
     if (err) {
         LOGE("Device open failed");
     } else {
         out = new AudioStreamOutALSA(this, &(*it));
-        err = out->set(format, channels, sampleRate);
+        err = out->set(format, channels, sampleRate, devices);
     }
 
     if (status) *status = err;
@@ -543,8 +526,6 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     alsa_handle.module = mALSADevice;
     alsa_handle.bufferSize = bufferSize;
     alsa_handle.devices = devices;
-    alsa_handle.curDev = 0;
-    alsa_handle.curMode = mode();
     alsa_handle.handle = 0;
     alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
     alsa_handle.channels = DEFAULT_CHANNEL_MODE;
@@ -571,7 +552,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     } else {
         snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_LPA);
     }
-    err = mALSADevice->open(&(*it), devices, mode());
+    err = mALSADevice->open(&(*it));
     out = new AudioStreamOutALSA(this, &(*it));
 
     if (status) *status = err;
@@ -613,8 +594,6 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     alsa_handle.module = mALSADevice;
     alsa_handle.bufferSize = bufferSize;
     alsa_handle.devices = devices;
-    alsa_handle.curDev = 0;
-    alsa_handle.curMode = mode();
     alsa_handle.handle = 0;
     alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
     alsa_handle.channels = VOICE_CHANNEL_MODE;
@@ -650,7 +629,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     mDeviceList.push_back(alsa_handle);
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
-    if (mDmicActive == true) {
+    if ((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) && (mDmicActive == true)) {
         devices |= AudioSystem::DEVICE_IN_BACK_MIC;
     }
     mALSADevice->route(&(*it), devices, mode(), mTtyMode);
@@ -666,12 +645,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     if(channels) {
         it->channels = AudioSystem::popCount(*channels);
     }
-    err = mALSADevice->open(&(*it), (it->curDev & AudioSystem::DEVICE_IN_ALL), mode());
+    err = mALSADevice->open(&(*it));
     if (err) {
         LOGE("Error opening pcm input device");
     } else {
         in = new AudioStreamInALSA(this, &(*it), acoustics);
-        err = in->set(format, channels, sampleRate);
+        err = in->set(format, channels, sampleRate, devices);
     }
 
     if (status) *status = err;
