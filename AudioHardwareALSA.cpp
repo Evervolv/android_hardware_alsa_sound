@@ -364,6 +364,9 @@ void AudioHardwareALSA::doRouting(int device)
         } else if (device & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
             device = device | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
+        } else if (device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+            device = device | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
+                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
         }
     }
     if (((device & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||

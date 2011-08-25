@@ -278,6 +278,9 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
             devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
+        } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+            devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
+                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
         }
     }
 
