@@ -72,6 +72,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
             mIsFmActive = 0;
             mDmicActive = false;
             mAncActive = false;
+            mBluetoothVGS = false;
             mTtyMode = TTY_OFF;
             snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
             if (mUcMgr < 0) {
@@ -239,10 +240,47 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         param.remove(key);
     }
 
+    key = String8(BTHEADSET_VGS);
+    if (param.get(key, value) == NO_ERROR) {
+        if (value == "on") {
+            mBluetoothVGS = true;
+        } else {
+            mBluetoothVGS = false;
+        }
+    }
+
     if (param.size()) {
         status = BAD_VALUE;
     }
     return status;
+}
+
+String8 AudioHardwareALSA::getParameters(const String8& keys)
+{
+    AudioParameter param = AudioParameter(keys);
+    String8 value;
+
+    String8 key = String8(DUALMIC_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+        value = String8(mDmicActive ? "true" : "false");
+        param.add(key, value);
+    }
+
+    key = String8("Fm-radio");
+    if ( param.get(key,value) == NO_ERROR ) {
+        if ( mIsFmActive ) {
+            param.addInt(String8("isFMON"), true );
+        }
+    }
+
+    key = String8(BTHEADSET_VGS);
+    if (param.get(key, value) == NO_ERROR) {
+        if(mBluetoothVGS)
+           param.addInt(String8("isVGS"), true);
+    }
+
+    LOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
+    return param.toString();
 }
 
 void AudioHardwareALSA::doRouting(int device)

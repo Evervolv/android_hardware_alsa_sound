@@ -51,10 +51,12 @@ class AudioHardwareALSA;
 #define DEFAULT_BUFFER_SIZE   4096
 #define FM_BUFFER_SIZE        1024
 
-#define DUALMIC_KEY "dualmic_enabled"
-#define ANC_KEY "anc_enabled"
-#define TTY_MODE_KEY "tty_mode"
-#define BT_SAMPLERATE_KEY "bt_samplerate"
+#define DUALMIC_KEY         "dualmic_enabled"
+#define ANC_KEY             "anc_enabled"
+#define TTY_MODE_KEY        "tty_mode"
+#define BT_SAMPLERATE_KEY   "bt_samplerate"
+#define BTHEADSET_VGS       "bt_headset_vgs"
+
 #define TTY_OFF 0
 #define TTY_VCO 1
 #define TTY_HCO 2
@@ -321,7 +323,7 @@ public:
 
     // set/get global audio parameters
     virtual status_t    setParameters(const String8& keyValuePairs);
-    //virtual String8     getParameters(const String8& keys);
+    virtual String8     getParameters(const String8& keys);
 
     // Returns audio input buffer size according to parameters passed or 0 if one of the
     // parameters is not supported
@@ -393,6 +395,7 @@ protected:
     int mIsFmActive;
     bool mDmicActive;
     bool mAncActive;
+    bool mBluetoothVGS;
 };
 
 // ----------------------------------------------------------------------------
