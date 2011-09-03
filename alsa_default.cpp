@@ -24,13 +24,6 @@
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
 
-#define ALSA_DEVICE_DEFAULT         "hw:0,0"
-#define ALSA_DEVICE_VOICE_CALL      "hw:0,2"
-#define ALSA_DEVICE_FM_RADIO_PLAY   "hw:0,5"
-#define ALSA_DEVICE_FM_RADIO_REC    "hw:0,6"
-#define ALSA_DEVICE_LPA             "hw:0,4"
-#define ALSA_DEVICE_HDMI            "hw:0,7"
-
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
 #endif
@@ -142,25 +135,20 @@ static int ttyMode = 0;
 static int callMode = AudioSystem::MODE_NORMAL;
 // ----------------------------------------------------------------------------
 
-const char *deviceName(char *useCase)
+int deviceName(alsa_handle_t *handle, unsigned flags, char **value)
 {
-    if ((!strcmp(useCase, SND_USE_CASE_VERB_HIFI)) ||
-        (!strcmp(useCase, SND_USE_CASE_VERB_HIFI_REC)) ||
-        (!strcmp(useCase, SND_USE_CASE_VERB_FM_REC)) ||
-        (!strcmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)) ||
-        (!strcmp(useCase, SND_USE_CASE_MOD_CAPTURE_FM)) ||
-        (!strcmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC))) {
-        return ALSA_DEVICE_DEFAULT;
-    } else if (!strcmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
-        return ALSA_DEVICE_LPA;
-    } else if ((!strcmp(useCase, SND_USE_CASE_VERB_VOICECALL)) ||
-               (!strcmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
-               (!strcmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
-        return ALSA_DEVICE_VOICE_CALL;
+    int ret = 0;
+    char ident[70];
+
+    if (flags & PCM_IN) {
+        strlcpy(ident, "CapturePCM/", sizeof(ident));
     } else {
-        LOGE("Unknown use case # %s", useCase);
+        strlcpy(ident, "PlaybackPCM/", sizeof(ident));
     }
-    return NULL;
+    strlcat(ident, handle->useCase, sizeof(ident));
+    ret = snd_use_case_get(handle->ucMgr, ident, (const char **)value);
+    LOGV("Device value returned is %s", (*value));
+    return ret;
 }
 
 status_t setHardwareParams(alsa_handle_t *handle)
@@ -171,8 +159,6 @@ status_t setHardwareParams(alsa_handle_t *handle)
     unsigned int requestedRate = handle->sampleRate;
     int numPeriods = 8;
     int status = 0;
-
-    const char* device = deviceName(handle->useCase);
 
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
@@ -345,6 +331,7 @@ static status_t s_init(alsa_device_t *module, ALSAHandleList &list)
 
 static status_t s_open(alsa_handle_t *handle)
 {
+    char *devName;
     unsigned flags = 0;
     int err = NO_ERROR;
 
@@ -356,8 +343,6 @@ static status_t s_open(alsa_handle_t *handle)
     }
 
     LOGV("s_open: handle %p", handle);
-
-    const char *devName = deviceName(handle->useCase);
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
@@ -376,10 +361,15 @@ static status_t s_open(alsa_handle_t *handle)
     } else {
         flags |= PCM_STEREO;
     }
+    if (deviceName(handle, flags, &devName) < 0) {
+        LOGE("Failed to get pcm device node: %s", devName);
+        return NO_INIT;
+    }
     handle->handle = pcm_open(flags, (char*)devName);
 
     if (!handle->handle) {
         LOGE("s_open: Failed to initialize ALSA device '%s'", devName);
+        free(devName);
         return NO_INIT;
     }
 
@@ -395,21 +385,25 @@ static status_t s_open(alsa_handle_t *handle)
         s_standby(handle);
     }
 
+    free(devName);
     return NO_ERROR;
 }
 
 static status_t s_start_voice_call(alsa_handle_t *handle)
 {
+    char* devName;
     unsigned flags = 0;
     int err = NO_ERROR;
 
     LOGV("s_start_voice_call: handle %p", handle);
-    const char *devName = deviceName(handle->useCase);
-
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
 
     flags = PCM_OUT | PCM_MONO;
+    if (deviceName(handle, flags, &devName) < 0) {
+        LOGE("Failed to get pcm device node");
+        return NO_INIT;
+    }
     handle->handle = pcm_open(flags, (char*)devName);
     if (!handle->handle) {
         LOGE("s_start_voicecall: could not open PCM device");
@@ -442,11 +436,17 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
 
     // Store the PCM playback device pointer in recHandle
     handle->recHandle = handle->handle;
+    free(devName);
 
     // Open PCM capture device
     flags = PCM_IN | PCM_MONO;
+    if (deviceName(handle, flags, &devName) < 0) {
+        LOGE("Failed to get pcm device node");
+        goto Error;
+    }
     handle->handle = pcm_open(flags, (char*)devName);
     if (!handle->handle) {
+        free(devName);
         goto Error;
     }
 
@@ -474,16 +474,19 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
         goto Error;
     }
 
+    free(devName);
     return NO_ERROR;
 
 Error:
     LOGE("s_start_voice_call: Failed to initialize ALSA device '%s'", devName);
+    free(devName);
     s_close(handle);
     return NO_INIT;
 }
 
 static status_t s_start_fm(alsa_handle_t *handle)
 {
+    char *devName;
     unsigned flags = 0;
     int err = NO_ERROR;
 
@@ -493,7 +496,11 @@ static status_t s_start_fm(alsa_handle_t *handle)
     // the device to be opened
 
     flags = PCM_OUT | PCM_STEREO;
-    handle->handle = pcm_open(flags, (char*)ALSA_DEVICE_FM_RADIO_PLAY);
+    if (deviceName(handle, flags, &devName) < 0) {
+        LOGE("Failed to get pcm device node");
+        goto Error;
+    }
+    handle->handle = pcm_open(flags, (char*)devName);
     if (!handle->handle) {
         LOGE("s_start_fm: could not open PCM device");
         goto Error;
@@ -525,10 +532,15 @@ static status_t s_start_fm(alsa_handle_t *handle)
 
     // Store the PCM playback device pointer in recHandle
     handle->recHandle = handle->handle;
+    free(devName);
 
     // Open PCM capture device
     flags = PCM_IN | PCM_STEREO;
-    handle->handle = pcm_open(flags, (char*)ALSA_DEVICE_FM_RADIO_REC);
+    if (deviceName(handle, flags, &devName) < 0) {
+        LOGE("Failed to get pcm device node");
+        goto Error;
+    }
+    handle->handle = pcm_open(flags, (char*)devName);
     if (!handle->handle) {
         goto Error;
     }
@@ -558,9 +570,11 @@ static status_t s_start_fm(alsa_handle_t *handle)
     }
 
     s_set_fm_vol(fmVolume);
+    free(devName);
     return NO_ERROR;
 
 Error:
+    free(devName);
     s_close(handle);
     return NO_INIT;
 }
