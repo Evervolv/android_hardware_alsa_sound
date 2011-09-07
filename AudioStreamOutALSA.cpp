@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <math.h>
 
 #define LOG_TAG "AudioStreamOutALSA"
 #define LOG_NDEBUG 0
@@ -75,11 +76,14 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
     if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
        !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) {
         volume = (left + right) / 2;
-        lpa_vol = AudioSystem::logToLinear(volume);
-        if (lpa_vol > 100)
-            lpa_vol = 100;
-        else if (lpa_vol < 0)
-            lpa_vol = 0;
+        if (volume < 0.0) {
+            LOGW("AudioSessionOutMSM7xxx::setVolume(%f) under 0.0, assuming 0.0\n", volume);
+            volume = 0.0;
+        } else if (volume > 1.0) {
+            LOGW("AudioSessionOutMSM7xxx::setVolume(%f) over 1.0, assuming 1.0\n", volume);
+            volume = 1.0;
+        }
+        lpa_vol = lrint(volume * 100.0);
         LOGV("setLpaVolume(%f)\n", volume);
         LOGV("Setting LPA volume to %d (available range is 0 to 100)\n", lpa_vol);
         mHandle->module->setLpaVolume(lpa_vol);
