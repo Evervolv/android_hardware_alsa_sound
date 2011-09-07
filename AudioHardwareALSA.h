@@ -390,6 +390,8 @@ protected:
 
     snd_use_case_mgr_t *mUcMgr;
 
+    uint32_t            mCurDevice;
+
     bool                mMicMute;
     int mTtyMode;
     int mIsVoiceCallActive;
