@@ -293,6 +293,8 @@ void AudioHardwareALSA::doRouting(int device)
         LOGV("Ignoring routing for FM/INCALL recording");
         return;
     }
+    if (device == 0)
+        device = mCurDevice;
     if (mAncActive == true) {
         LOGV("doRouting: setting anc device device %d", device);
         if (device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
@@ -465,6 +467,7 @@ void AudioHardwareALSA::doRouting(int device)
         it--;
         mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
     }
+    mCurDevice = device;
 }
 
 AudioStreamOut *
