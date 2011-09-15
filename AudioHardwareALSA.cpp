@@ -353,9 +353,11 @@ void AudioHardwareALSA::doRouting(int device)
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         }
     }
-    if ((device & AudioSystem::DEVICE_IN_BUILTIN_MIC) && (mDmicActive == true)) {
+    if (((device & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+         (device & AudioSystem::DEVICE_IN_DEFAULT)) && (mDmicActive == true)) {
         device |= AudioSystem::DEVICE_IN_BACK_MIC;
-    } else if ((device & AudioSystem::DEVICE_IN_BACK_MIC) && (mDmicActive == false)) {
+    } else if (((device & AudioSystem::DEVICE_IN_BACK_MIC) ||
+                (device & AudioSystem::DEVICE_IN_DEFAULT)) && (mDmicActive == false)) {
         device &= (~AudioSystem::DEVICE_IN_BACK_MIC);
     }
     LOGV("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
