@@ -407,8 +407,8 @@ void AudioHardwareALSA::doRouting(int device)
                (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
                 LOGV("Disabling voice call");
                 mALSADevice->close(&(*it));
-                mDeviceList.erase(it);
                 mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
+                mDeviceList.erase(it);
                 break;
             }
         }
@@ -458,8 +458,8 @@ void AudioHardwareALSA::doRouting(int device)
             if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
               (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
                 mALSADevice->close(&(*it));
-                mDeviceList.erase(it);
                 mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
+                mDeviceList.erase(it);
                 break;
             }
         }
