@@ -656,9 +656,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
             (newMode == AudioSystem::MODE_IN_CALL)) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(alsa_handle.useCase));
-        } else if((devices == AudioSystem::DEVICE_IN_FM_RX) ||
-                  (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
+        } else if((devices == AudioSystem::DEVICE_IN_FM_RX)) {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
+        } else if(devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, sizeof(alsa_handle.useCase));
         } else {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(alsa_handle.useCase));
         }
@@ -667,9 +668,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             (newMode == AudioSystem::MODE_IN_CALL)) {
             LOGE("Error opening input stream: In-call recording without voice call");
             return 0;
-        } else if((devices == AudioSystem::DEVICE_IN_FM_RX) ||
-                  (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
+        } else if(devices == AudioSystem::DEVICE_IN_FM_RX) {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC, sizeof(alsa_handle.useCase));
+        } else if (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_A2DP_REC, sizeof(alsa_handle.useCase));
         } else {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(alsa_handle.useCase));
         }
@@ -683,7 +685,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     }
     mALSADevice->route(&(*it), devices, mode(), mTtyMode);
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
-       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC)) {
+       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
+       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
         snd_use_case_set(mUcMgr, "_verb", it->useCase);
     } else {
         snd_use_case_set(mUcMgr, "_enamod", it->useCase);
