@@ -335,12 +335,13 @@ static status_t s_open(alsa_handle_t *handle)
     unsigned flags = 0;
     int err = NO_ERROR;
 
-    s_close(handle);
-
+    /* No need to call s_close for LPA as pcm device open and close is handled by LPAPlayer in stagefright */
     if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
         LOGV("s_open: Opening LPA playback");
         return NO_ERROR;
     }
+
+    s_close(handle);
 
     LOGV("s_open: handle %p", handle);
 
@@ -639,6 +640,9 @@ static status_t s_close(alsa_handle_t *handle)
             handle->recHandle = NULL;
         }
         disableDevice(handle);
+    } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
+        disableDevice(handle);
     }
 
     return err;
@@ -662,6 +666,9 @@ static status_t s_standby(alsa_handle_t *handle)
         if(err != NO_ERROR) {
             LOGE("s_standby: pcm_close failed with err %d", err);
         }
+        disableDevice(handle);
+    } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
         disableDevice(handle);
     }
 
