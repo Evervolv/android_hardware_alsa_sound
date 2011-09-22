@@ -779,7 +779,11 @@ char *getUCMDevice(uint32_t devices, int input)
              } else if (ttyMode == TTY_FULL) {
                  return strdup(SND_USE_CASE_DEV_TTY_FULL_TX);
              } else if (ttyMode == TTY_VCO) {
-                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+                 if (!strncmp(mic_type, "analog", 6)) {
+                     return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+                 } else {
+                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+                 }
              }
         } else if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
             if (!strncmp(mic_type, "analog", 6)) {
@@ -827,7 +831,11 @@ char *getUCMDevice(uint32_t devices, int input)
                    (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||
                    (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL)) {
             LOGI("No proper mapping found with UCM device list, setting default");
-             return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+            if (!strncmp(mic_type, "analog", 6)) {
+                return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+            } else {
+                return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+            }
         } else {
             LOGV("No valid input device: %u", devices);
         }
