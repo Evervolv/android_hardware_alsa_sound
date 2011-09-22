@@ -118,6 +118,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
         }
         free(use_case);
+        if ((mParent->mode() == AudioSystem::MODE_IN_CALL) && (mParent->getDmicStatus() == true)) {
+            mDevices |= AudioSystem::DEVICE_IN_BACK_MIC;
+        }
         mHandle->module->route(mHandle, mDevices, mParent->mode(), (mParent->getTtyMode()));
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI)) {
             snd_use_case_set(mHandle->ucMgr, "_verb", SND_USE_CASE_VERB_HIFI);

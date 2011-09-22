@@ -520,6 +520,9 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     LOGV("useCase %s", it->useCase);
+    if ((mode() == AudioSystem::MODE_IN_CALL) && (mDmicActive == true)) {
+        devices |= AudioSystem::DEVICE_IN_BACK_MIC;
+    }
     mALSADevice->route(&(*it), devices, mode(), mTtyMode);
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
         snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI);
@@ -589,6 +592,9 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     LOGV("useCase %s", it->useCase);
+    if ((AudioSystem::MODE_IN_CALL == mode()) && (mDmicActive == true)) {
+        devices |= AudioSystem::DEVICE_IN_BACK_MIC;
+    }
     mALSADevice->route(&(*it), devices, mode(), mTtyMode);
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
         snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
