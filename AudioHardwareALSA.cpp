@@ -491,6 +491,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                                     uint32_t *sampleRate,
                                     status_t *status)
 {
+    Mutex::Autolock autoLock(mLock);
     LOGV("openOutputStream: devices 0x%x channels %d sampleRate %d",
          devices, *channels, *sampleRate);
 
@@ -565,6 +566,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
                                      status_t *status,
                                      int sessionId)
 {
+    Mutex::Autolock autoLock(mLock);
     LOGE("openOutputSession");
     AudioStreamOutALSA *out = 0;
     status_t err = BAD_VALUE;
@@ -634,6 +636,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                                    status_t *status,
                                    AudioSystem::audio_in_acoustics acoustics)
 {
+    Mutex::Autolock autoLock(mLock);
     char *use_case;
     int newMode = mode();
 

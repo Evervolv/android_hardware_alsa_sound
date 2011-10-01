@@ -96,7 +96,6 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 {
     char *use_case;
-    AutoMutex lock(mLock);
 
     LOGV("write:: buffer %p, bytes %d", buffer, bytes);
     if (!mPowerLock) {
@@ -111,6 +110,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     int write_pending = bytes;
 
     if(mHandle->handle == NULL) {
+        mParent->mLock.lock();
         snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI, sizeof(mHandle->useCase));
@@ -130,8 +130,10 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         mHandle->module->open(mHandle);
         if(mHandle->handle == NULL) {
             LOGE("write:: device open failed");
+            mParent->mLock.unlock();
             return 0;
         }
+        mParent->mLock.unlock();
     }
 
     do {
@@ -168,14 +170,14 @@ status_t AudioStreamOutALSA::dump(int fd, const Vector<String16>& args)
 
 status_t AudioStreamOutALSA::open(int mode)
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     return ALSAStreamOps::open(mode);
 }
 
 status_t AudioStreamOutALSA::close()
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     LOGV("close");
     ALSAStreamOps::close();
@@ -190,7 +192,7 @@ status_t AudioStreamOutALSA::close()
 
 status_t AudioStreamOutALSA::standby()
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     LOGV("standby");
 

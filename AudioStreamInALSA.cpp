@@ -60,7 +60,6 @@ status_t AudioStreamInALSA::setGain(float gain)
 
 ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 {
-    AutoMutex lock(mLock);
 
     LOGV("read:: buffer %p, bytes %d", buffer, bytes);
 
@@ -76,6 +75,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     int newMode = mParent->mode();
 
     if(mHandle->handle == NULL) {
+        mParent->mLock.lock();
         snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
@@ -92,6 +92,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
                 LOGE("Error reading: In call recording without voice call");
+                mParent->mLock.unlock();
                 return 0;
             } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC, sizeof(mHandle->useCase));
@@ -116,8 +117,10 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         mHandle->module->open(mHandle);
         if(mHandle->handle == NULL) {
             LOGE("read:: PCM device open failed");
+            mParent->mLock.unlock();
             return 0;
         }
+        mParent->mLock.unlock();
     }
 
     int read_pending = bytes;
@@ -154,7 +157,7 @@ status_t AudioStreamInALSA::dump(int fd, const Vector<String16>& args)
 
 status_t AudioStreamInALSA::open(int mode)
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     status_t status = ALSAStreamOps::open(mode);
 
@@ -163,7 +166,7 @@ status_t AudioStreamInALSA::open(int mode)
 
 status_t AudioStreamInALSA::close()
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
     LOGV("close");
     ALSAStreamOps::close();
 
@@ -177,7 +180,7 @@ status_t AudioStreamInALSA::close()
 
 status_t AudioStreamInALSA::standby()
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     LOGV("standby");
 
@@ -193,7 +196,7 @@ status_t AudioStreamInALSA::standby()
 
 void AudioStreamInALSA::resetFramesLost()
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
     mFramesLost = 0;
 }
 
@@ -208,7 +211,7 @@ unsigned int AudioStreamInALSA::getInputFramesLost() const
 
 status_t AudioStreamInALSA::setAcousticParams(void *params)
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     return (status_t)NO_ERROR;
 }

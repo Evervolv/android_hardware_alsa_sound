@@ -164,7 +164,6 @@ protected:
     alsa_handle_t *         mHandle;
     uint32_t                mDevices;
 
-    Mutex                   mLock;
     bool                    mPowerLock;
 };
 
@@ -389,6 +388,8 @@ protected:
     alsa_device_t *     mALSADevice;
 
     ALSAHandleList      mDeviceList;
+
+    Mutex                   mLock;
 
     snd_use_case_mgr_t *mUcMgr;
 

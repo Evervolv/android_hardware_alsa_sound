@@ -49,7 +49,7 @@ ALSAStreamOps::ALSAStreamOps(AudioHardwareALSA *parent, alsa_handle_t *handle) :
 
 ALSAStreamOps::~ALSAStreamOps()
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     close();
 
@@ -159,7 +159,7 @@ status_t ALSAStreamOps::set(int      *format,
 
 status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
-    AutoMutex lock(mLock);
+    Mutex::Autolock autoLock(mParent->mLock);
 
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
