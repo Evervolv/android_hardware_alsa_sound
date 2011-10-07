@@ -297,6 +297,7 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 
 void AudioHardwareALSA::doRouting(int device)
 {
+    Mutex::Autolock autoLock(mLock);
     int newMode = mode();
 
     if ((device == AudioSystem::DEVICE_IN_VOICE_CALL) ||
