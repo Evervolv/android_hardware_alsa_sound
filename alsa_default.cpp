@@ -41,9 +41,12 @@ static status_t s_close(alsa_handle_t *);
 static status_t s_standby(alsa_handle_t *);
 static status_t s_route(alsa_handle_t *, uint32_t, int);
 static status_t s_start_voice_call(alsa_handle_t *);
+static status_t s_start_voip_call(alsa_handle_t *);
 static status_t s_start_fm(alsa_handle_t *);
 static void     s_set_voice_volume(int);
+static void     s_set_voip_volume(int);
 static void     s_set_mic_mute(int);
+static void     s_set_voip_mic_mute(int);
 static status_t s_set_fm_vol(int);
 static void     s_set_btsco_rate(int);
 static status_t s_set_lpa_vol(int);
@@ -95,9 +98,12 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->route = s_route;
     dev->standby = s_standby;
     dev->startVoiceCall = s_start_voice_call;
+    dev->startVoipCall = s_start_voip_call;
     dev->startFm = s_start_fm;
     dev->setVoiceVolume = s_set_voice_volume;
+    dev->setVoipVolume = s_set_voip_volume;
     dev->setMicMute = s_set_mic_mute;
+    dev->setVoipMicMute = s_set_voip_mic_mute;
     dev->setFmVolume = s_set_fm_vol;
     dev->setBtscoRate = s_set_btsco_rate;
     dev->setLpaVolume = s_set_lpa_vol;
@@ -177,6 +183,10 @@ status_t setHardwareParams(alsa_handle_t *handle)
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
         numPeriods = 2;
     }
+    if((!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
+        (!strcmp(handle->useCase,SND_USE_CASE_VERB_IP_VOICECALL))) {
+        numPeriods = 10;
+    }
     if ((!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO))) {
         numPeriods = 4;
@@ -208,6 +218,7 @@ status_t setHardwareParams(alsa_handle_t *handle)
     handle->handle->channels = handle->channels;
     handle->handle->period_size = periodSize;
     handle->handle->buffer_size = bufferSize;
+    handle->periodSize = periodSize;
 
     if (param_set_hw_params(handle->handle, params)) {
         LOGE("cannot set hw params");
@@ -237,9 +248,17 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     numPeriods = bufferSize/periodSize;
     params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;
-    params->avail_min = periodSize/2;
-    params->start_threshold = periodSize/2 * numPeriods/2;
-    params->stop_threshold = INT_MAX;
+    if(((!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
+        (!strcmp(handle->useCase,SND_USE_CASE_VERB_IP_VOICECALL)))){
+          LOGV("setparam:  start\stop threshold for Voip ");
+          params->avail_min = handle->channels - 1 ? periodSize/4 : periodSize/2;
+          params->start_threshold = periodSize/2;
+          params->stop_threshold = INT_MAX;
+     } else {
+         params->avail_min = periodSize/2;
+         params->start_threshold = periodSize/2 * numPeriods/2;
+         params->stop_threshold = INT_MAX;
+     }
     params->silence_threshold = 0;
     params->silence_size = 0;
 
@@ -255,7 +274,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     char *device, ident[70];
     LOGV("%s: device %d", __FUNCTION__, devices);
 
-    if (mode == AudioSystem::MODE_IN_CALL) {
+    if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
         if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
             (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
             devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
@@ -290,8 +309,8 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 
     device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
     if (device != NULL) {
-        if (strcmp(curRxUCMDevice, "None")) {
-            if ((!strcmp(device, curRxUCMDevice)) && (mode != AudioSystem::MODE_IN_CALL)){
+        if (strcmp(curRxUCMDevice, "None") && ((mode != AudioSystem::MODE_IN_CALL) || (mode != AudioSystem::MODE_IN_COMMUNICATION)) ) {
+            if ((!strcmp(device, curRxUCMDevice))) {
                 LOGV("Required device is already set, ignoring device enable");
                 snd_use_case_set(handle->ucMgr, "_enadev", device);
             } else {
@@ -309,8 +328,8 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     }
     device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
     if (device != NULL) {
-       if (strcmp(curTxUCMDevice, "None")) {
-           if ((!strcmp(device, curTxUCMDevice)) && (mode != AudioSystem::MODE_IN_CALL)){
+        if (strcmp(curTxUCMDevice, "None") && ((mode != AudioSystem::MODE_IN_CALL) || (mode != AudioSystem::MODE_IN_COMMUNICATION)) ) {
+            if ((!strcmp(device, curTxUCMDevice))) {
                 LOGV("Required device is already set, ignoring device enable");
                 snd_use_case_set(handle->ucMgr, "_enadev", device);
             } else {
@@ -397,6 +416,95 @@ static status_t s_open(alsa_handle_t *handle)
 
     free(devName);
     return NO_ERROR;
+}
+
+static status_t s_start_voip_call(alsa_handle_t *handle)
+{
+
+    char* devName;
+    char* devName1;
+    unsigned flags = 0;
+    int err = NO_ERROR;
+    uint8_t voc_pkt[VOIP_BUFFER_MAX_SIZE];
+
+    s_close(handle);
+    flags = PCM_OUT;
+    flags |= PCM_MONO;
+    LOGV("s_open:s_start_voip_call  handle %p", handle);
+
+    if (deviceName(handle, flags, &devName) < 0) {
+         LOGE("Failed to get pcm device node");
+         return NO_INIT;
+    }
+
+     handle->handle = pcm_open(flags, (char*)devName);
+
+     if (!handle->handle) {
+          free(devName);
+          LOGE("s_open: Failed to initialize ALSA device '%s'", devName);
+          return NO_INIT;
+     }
+
+     if (!pcm_ready(handle->handle)) {
+         LOGE(" pcm ready failed");
+     }
+
+     handle->handle->flags = flags;
+     err = setHardwareParams(handle);
+
+     if (err == NO_ERROR) {
+         err = setSoftwareParams(handle);
+     }
+
+     err = pcm_prepare(handle->handle);
+     if(err != NO_ERROR) {
+         LOGE("DEVICE_OUT_DIRECTOUTPUT: pcm_prepare failed");
+     }
+
+     /* first write required start dsp */
+     memset(&voc_pkt,0,sizeof(voc_pkt));
+     pcm_write(handle->handle,&voc_pkt,handle->handle->period_size);
+     handle->rxHandle = handle->handle;
+     free(devName);
+     LOGV("s_open: DEVICE_IN_COMMUNICATION ");
+     flags = PCM_IN;
+     flags |= PCM_MONO;
+     handle->handle = 0;
+
+     if (deviceName(handle, flags, &devName1) < 0) {
+        LOGE("Failed to get pcm device node");
+        return NO_INIT;
+     }
+     handle->handle = pcm_open(flags, (char*)devName1);
+
+     if (!handle->handle) {
+         free(devName);
+         LOGE("s_open: Failed to initialize ALSA device '%s'", devName);
+         return NO_INIT;
+     }
+
+     if (!pcm_ready(handle->handle)) {
+        LOGE(" pcm ready in failed");
+     }
+
+     handle->handle->flags = flags;
+
+     err = setHardwareParams(handle);
+
+     if (err == NO_ERROR) {
+         err = setSoftwareParams(handle);
+     }
+
+
+     err = pcm_prepare(handle->handle);
+     if(err != NO_ERROR) {
+         LOGE("DEVICE_IN_COMMUNICATION: pcm_prepare failed");
+     }
+
+     /* first read required start dsp */
+     memset(&voc_pkt,0,sizeof(voc_pkt));
+     pcm_read(handle->handle,&voc_pkt,handle->handle->period_size);
+     return NO_ERROR;
 }
 
 static status_t s_start_voice_call(alsa_handle_t *handle)
@@ -628,25 +736,26 @@ static status_t s_close(alsa_handle_t *handle)
 {
     int ret;
     status_t err = NO_ERROR;
-    struct pcm *h = handle->handle;
+     struct pcm *h = handle->rxHandle;
 
-    handle->handle = 0;
-    LOGV("s_close: handle %p", handle);
-
+    handle->rxHandle = 0;
+    LOGV("s_close: handle %p h %p", handle, h);
     if (h) {
+        LOGV("s_close rxHandle\n");
         err = pcm_close(h);
         if(err != NO_ERROR) {
-            LOGE("s_close: pcm_close failed with err %d", err);
+            LOGE("s_close: pcm_close failed for rxHandle with err %d", err);
         }
+    }
 
-        if(((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) || (!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
-            (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM))) &&
-            handle->rxHandle != NULL) {
-            err = pcm_close(handle->rxHandle);
-            if(err != NO_ERROR) {
-                LOGE("s_close: pcm_close failed with err %d", err);
-            }
-            handle->rxHandle = NULL;
+    h = handle->handle;
+    handle->handle = 0;
+
+    if (h) {
+          LOGV("s_close handle h %p\n", h);
+        err = pcm_close(h);
+        if(err != NO_ERROR) {
+            LOGE("s_close: pcm_close failed for handle with err %d", err);
         }
         disableDevice(handle);
     } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
@@ -666,14 +775,26 @@ static status_t s_close(alsa_handle_t *handle)
 static status_t s_standby(alsa_handle_t *handle)
 {
     int ret;
-    status_t err = NO_ERROR;
-    struct pcm *h = handle->handle;
-    handle->handle = 0;
-    LOGV("s_standby\n");
+    status_t err = NO_ERROR;  
+    struct pcm *h = handle->rxHandle;
+    handle->rxHandle = 0;
+    LOGE("s_close: handle %p h %p", handle, h);
     if (h) {
+        LOGE("s_standby  rxHandle\n");
         err = pcm_close(h);
         if(err != NO_ERROR) {
-            LOGE("s_standby: pcm_close failed with err %d", err);
+            LOGE("s_standby: pcm_close failed for rxHandle with err %d", err);
+        }
+    }
+
+    h = handle->handle;
+    handle->handle = 0;
+
+    if (h) {
+          LOGE("s_standby handle h %p\n", h);
+        err = pcm_close(h);
+        if(err != NO_ERROR) {
+            LOGE("s_standby: pcm_close failed for handle with err %d", err);
         }
         disableDevice(handle);
     } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
@@ -705,7 +826,6 @@ static void disableDevice(alsa_handle_t *handle)
         } else {
             snd_use_case_set(handle->ucMgr, "_dismod", handle->useCase);
         }
-        handle->useCase[0] = 0;
     } else {
         LOGE("Invalid state, no valid use case found to disable");
     }
@@ -770,6 +890,7 @@ char *getUCMDevice(uint32_t devices, int input)
                 return strdup(SND_USE_CASE_DEV_BTSCO_NB_RX); /* BTSCO RX*/
         } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) ||
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
+                   (devices & AudioSystem::DEVICE_OUT_DIRECTOUTPUT) ||
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
             /* Nothing to be done, use current active device */
             return strdup(curRxUCMDevice);
@@ -838,7 +959,8 @@ char *getUCMDevice(uint32_t devices, int input)
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }
             }
-        } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
+        } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
+                   (devices & AudioSystem::DEVICE_IN_FM_RX) ||
                    (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
                    (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
             /* Nothing to be done, use current active device */
@@ -867,11 +989,24 @@ void s_set_voice_volume(int vol)
     control.set("Voice Rx Volume", vol, 0);
 }
 
+void s_set_voip_volume(int vol)
+{
+    LOGV("s_set_voip_volume: volume %d", vol);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("Voip Rx Volume", vol, 0);
+}
 void s_set_mic_mute(int state)
 {
     LOGV("s_set_mic_mute: state %d", state);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voice Tx Mute", state, 0);
+}
+
+void s_set_voip_mic_mute(int state)
+{
+    LOGV("s_set_voip_mic_mute: state %d", state);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("Voip Tx Mute", state, 0);
 }
 
 void s_set_btsco_rate(int rate)

@@ -95,6 +95,7 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 
 ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 {
+    int period_size;
     char *use_case;
 
     LOGV("write:: buffer %p, bytes %d", buffer, bytes);
@@ -109,22 +110,44 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 
     int write_pending = bytes;
 
-    if(mHandle->handle == NULL) {
+    if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
+         (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
+         (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
         mParent->mLock.lock();
         snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-            strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI, sizeof(mHandle->useCase));
+            if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
+                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,sizeof(mHandle->useCase));
+             }
+             else {
+                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI, sizeof(mHandle->useCase));
+             }
         } else {
-            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
+            if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,sizeof(mHandle->useCase));
+             } else {
+                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
+             }
         }
         free(use_case);
-        mHandle->module->route(mHandle, mDevices, mParent->mode());
-        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI)) {
-            snd_use_case_set(mHandle->ucMgr, "_verb", SND_USE_CASE_VERB_HIFI);
+        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+              mHandle->module->route(mHandle, mDevices , AudioSystem::MODE_IN_COMMUNICATION);
+        } else {
+              mHandle->module->route(mHandle, mDevices , mParent->mode());
+        }
+        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+            snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
         }
-        mHandle->module->open(mHandle);
+        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+          (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+             err = mHandle->module->startVoipCall(mHandle);
+        }
+        else
+             mHandle->module->open(mHandle);
         if(mHandle->handle == NULL) {
             LOGE("write:: device open failed");
             mParent->mLock.unlock();
@@ -133,13 +156,20 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         mParent->mLock.unlock();
     }
 
+    period_size = mHandle->periodSize;
     do {
-        if (write_pending < mHandle->handle->period_size) {
-            write_pending = mHandle->handle->period_size;
+        if (write_pending < period_size) {
+            write_pending = period_size;
         }
-        n = pcm_write(mHandle->handle,
+        if((mParent->mVoipStreamCount) && (mHandle->rxHandle != 0)) {
+            n = pcm_write(mHandle->rxHandle,
                      (char *)buffer + sent,
-                      mHandle->handle->period_size);
+                      period_size);
+        } else if (mHandle->handle != 0){
+            n = pcm_write(mHandle->handle,
+                     (char *)buffer + sent,
+                      period_size);
+        }
         if (n == -EBADFD) {
             // Somehow the stream is in a bad state. The driver probably
             // has a bug and snd_pcm_recover() doesn't seem to handle this.
@@ -151,11 +181,11 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         }
         else {
             mFrameCount += n;
-            sent += static_cast<ssize_t>((mHandle->handle->period_size));
-            write_pending -= mHandle->handle->period_size;
+            sent += static_cast<ssize_t>((period_size));
+            write_pending -= period_size;
         }
 
-    } while (mHandle->handle && sent < bytes);
+    } while ((mHandle->handle||(mHandle->rxHandle && mParent->mVoipStreamCount)) && sent < bytes);
 
     return sent;
 }
@@ -176,7 +206,16 @@ status_t AudioStreamOutALSA::close()
 {
     Mutex::Autolock autoLock(mParent->mLock);
 
-    LOGV("close");
+
+    if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+         if((mParent->mVoipStreamCount)) {
+                return NO_ERROR;
+         }
+         mParent->mVoipStreamCount = 0;
+         mParent->mVoipMicMute = 0;
+     }
+
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -189,7 +228,11 @@ status_t AudioStreamOutALSA::close()
 
 status_t AudioStreamOutALSA::standby()
 {
-    Mutex::Autolock autoLock(mParent->mLock);
+
+     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+       (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+         return NO_ERROR;
+     }
 
     LOGV("standby");
 

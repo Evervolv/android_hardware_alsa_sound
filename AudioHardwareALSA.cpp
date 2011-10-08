@@ -56,7 +56,7 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 }
 
 AudioHardwareALSA::AudioHardwareALSA() :
-    mALSADevice(0)
+    mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false)
 {
     hw_module_t *module;
     int err = hw_get_module(ALSA_HARDWARE_MODULE_ID,
@@ -122,6 +122,8 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
         v = 1.0;
     }
 
+    int newMode = mode();
+    LOGD("setVoiceVolume  newMode %d",newMode);
     int vol = lrint(v * 100.0);
 
     // Voice volume levels from android are mapped to driver volume levels as follows.
@@ -131,7 +133,11 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
 
     // ToDo: Send mixer command only when voice call is active
     if(mALSADevice) {
-        mALSADevice->setVoiceVolume(vol);
+        if(newMode == AudioSystem::MODE_IN_COMMUNICATION) {
+            mALSADevice->setVoipVolume(vol);
+        } else {
+            mALSADevice->setVoiceVolume(vol);
+        }
     }
 
     return NO_ERROR;
@@ -304,8 +310,10 @@ void AudioHardwareALSA::doRouting(int device)
     int newMode = mode();
     if ((device == AudioSystem::DEVICE_IN_VOICE_CALL) ||
         (device == AudioSystem::DEVICE_IN_FM_RX) ||
+        (device == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) ||
+        (device == AudioSystem::DEVICE_IN_COMMUNICATION) ||
         (device == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
-        LOGV("Ignoring routing for FM/INCALL recording");
+        LOGV("Ignoring routing for FM/INCALL/VOIP recording");
         return;
     }
     if (device == 0)
@@ -435,6 +443,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 
     status_t err = BAD_VALUE;
     AudioStreamOutALSA *out = 0;
+    ALSAHandleList::iterator it;
 
     if (devices & (devices - 1)) {
         if (status) *status = err;
@@ -442,51 +451,125 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         return out;
     }
 
-    alsa_handle_t alsa_handle;
-    unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
+    if(devices == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) {
+        bool voipstream_active = false;
+        for(it = mDeviceList.begin();
+            it != mDeviceList.end(); ++it) {
+                if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                    LOGD("openOutput:  it->rxHandle %d it->handle %d",it->rxHandle,it->handle);
+                    voipstream_active = true;
+                    break;
+                }
+        }
 
-    for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
-        bufferSize &= ~b;
+      if(voipstream_active == false) {
+         mVoipStreamCount = 0;
+         mVoipMicMute = false;
+         alsa_handle_t alsa_handle;
+         unsigned long bufferSize;
+         if(*sampleRate == VOIP_SAMPLING_RATE_8K) {
+             bufferSize = VOIP_BUFFER_SIZE_8K;
+         }
+         else if(*sampleRate == VOIP_SAMPLING_RATE_16K) {
+             bufferSize = VOIP_BUFFER_SIZE_16K;
+         }
+         else {
+             LOGE("unsupported samplerate %d for voip",*sampleRate);
+             if (status) *status = err;
+                 return out;
+          }
+          alsa_handle.module = mALSADevice;
+          alsa_handle.bufferSize = bufferSize;
+          alsa_handle.devices = devices;
+          alsa_handle.handle = 0;
+          alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+          alsa_handle.channels = VOIP_DEFAULT_CHANNEL_MODE;
+          alsa_handle.sampleRate = *sampleRate;
+          alsa_handle.latency = VOIP_PLAYBACK_LATENCY;
+          alsa_handle.rxHandle = 0;
+          alsa_handle.ucMgr = mUcMgr;
+          char *use_case;
+          snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+          if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+              strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL, sizeof(alsa_handle.useCase));
+          } else {
+              strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP, sizeof(alsa_handle.useCase));
+          }
+          free(use_case);
+          mDeviceList.push_back(alsa_handle);
+          it = mDeviceList.end();
+          it--;
+          LOGV("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipStreamCount %d mode %d", it->useCase,mCurDevice,mVoipStreamCount, mode());
+          mALSADevice->route(&(*it), mCurDevice, AudioSystem::MODE_IN_COMMUNICATION);
+          if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+              snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_IP_VOICECALL);
+          } else {
+              snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP);
+          }
+          err = mALSADevice->startVoipCall(&(*it));
+          if (err) {
+              LOGE("Device open failed");
+              return NULL;
+          }
+      }
+      out = new AudioStreamOutALSA(this, &(*it));
+      err = out->set(format, channels, sampleRate, devices);
+      if(err == NO_ERROR) {
+          mVoipStreamCount++;   //increment VoipstreamCount only if success
+          LOGD("openoutput mVoipStreamCount %d",mVoipStreamCount);
+      }
+      if (status) *status = err;
+      return out;
+    } else
+    {
 
-    alsa_handle.module = mALSADevice;
-    alsa_handle.bufferSize = bufferSize;
-    alsa_handle.devices = devices;
-    alsa_handle.handle = 0;
-    alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
-    alsa_handle.channels = DEFAULT_CHANNEL_MODE;
-    alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
-    alsa_handle.latency = PLAYBACK_LATENCY;
-    alsa_handle.rxHandle = 0;
-    alsa_handle.ucMgr = mUcMgr;
+      alsa_handle_t alsa_handle;
+      unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
 
-    char *use_case;
-    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-    if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI, sizeof(alsa_handle.useCase));
-    } else {
-        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(alsa_handle.useCase));
+      for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
+          bufferSize &= ~b;
+
+      alsa_handle.module = mALSADevice;
+      alsa_handle.bufferSize = bufferSize;
+      alsa_handle.devices = devices;
+      alsa_handle.handle = 0;
+      alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+      alsa_handle.channels = DEFAULT_CHANNEL_MODE;
+      alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
+      alsa_handle.latency = PLAYBACK_LATENCY;
+      alsa_handle.rxHandle = 0;
+      alsa_handle.ucMgr = mUcMgr;
+
+      char *use_case;
+      snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+      if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+          strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI, sizeof(alsa_handle.useCase));
+      } else {
+          strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(alsa_handle.useCase));
+      }
+      free(use_case);
+      mDeviceList.push_back(alsa_handle);
+      ALSAHandleList::iterator it = mDeviceList.end();
+      it--;
+      LOGV("useCase %s", it->useCase);
+      mALSADevice->route(&(*it), devices, mode());
+      if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
+          snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI);
+      } else {
+          snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_MUSIC);
+      }
+      err = mALSADevice->open(&(*it));
+      if (err) {
+          LOGE("Device open failed");
+      } else {
+          out = new AudioStreamOutALSA(this, &(*it));
+          err = out->set(format, channels, sampleRate, devices);
+      }
+
+      if (status) *status = err;
+      return out;
     }
-    free(use_case);
-    mDeviceList.push_back(alsa_handle);
-    ALSAHandleList::iterator it = mDeviceList.end();
-    it--;
-    LOGV("useCase %s", it->useCase);
-    mALSADevice->route(&(*it), devices, mode());
-    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
-        snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI);
-    } else {
-        snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_MUSIC);
-    }
-    err = mALSADevice->open(&(*it));
-    if (err) {
-        LOGE("Device open failed");
-    } else {
-        out = new AudioStreamOutALSA(this, &(*it));
-        err = out->set(format, channels, sampleRate, devices);
-    }
-
-    if (status) *status = err;
-    return out;
 }
 
 void
@@ -574,6 +657,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 
     status_t err = BAD_VALUE;
     AudioStreamInALSA *in = 0;
+    ALSAHandleList::iterator it;
 
     LOGV("openInputStream: devices 0x%x channels %d sampleRate %d", devices, *channels, *sampleRate);
     if (devices & (devices - 1)) {
@@ -581,85 +665,159 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         return in;
     }
 
-    for(ALSAHandleList::iterator itDev = mDeviceList.begin();
-            itDev != mDeviceList.end(); ++itDev)
-    {
-        if((0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_HIFI_REC, MAX_UC_LEN))
-            ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, MAX_UC_LEN))
-            ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_FM, MAX_UC_LEN))
-            ||(0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_FM_REC, MAX_UC_LEN)))
-        {
-            LOGD("Input stream already exists, new stream not permitted: useCase:%s, devices:0x%x, module:%p", itDev->useCase, itDev->devices, itDev->module);
-            return in;
+    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) )  {
+        bool voipstream_active = false;
+        for(it = mDeviceList.begin();
+            it != mDeviceList.end(); ++it) {
+                if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                    LOGD("openInput:  it->rxHandle %d it->handle %d",it->rxHandle,it->handle);
+                    voipstream_active = true;
+                    break;
+                }
         }
-    }
-    alsa_handle_t alsa_handle;
-    unsigned long bufferSize = DEFAULT_IN_BUFFER_SIZE;
-
-    alsa_handle.module = mALSADevice;
-    alsa_handle.bufferSize = bufferSize;
-    alsa_handle.devices = devices;
-    alsa_handle.handle = 0;
-    alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
-    alsa_handle.channels = VOICE_CHANNEL_MODE;
-    alsa_handle.sampleRate = android::AudioRecord::DEFAULT_SAMPLE_RATE;
-    alsa_handle.latency = RECORD_LATENCY;
-    alsa_handle.rxHandle = 0;
-    alsa_handle.ucMgr = mUcMgr;
-
-    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-    if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-        if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
-            (newMode == AudioSystem::MODE_IN_CALL)) {
-                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(alsa_handle.useCase));
-        } else if((devices == AudioSystem::DEVICE_IN_FM_RX)) {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
-        } else if(devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, sizeof(alsa_handle.useCase));
-        } else {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(alsa_handle.useCase));
+        if(voipstream_active == false) {
+           mVoipStreamCount = 0;
+           mVoipMicMute = false;
+           alsa_handle_t alsa_handle;
+           unsigned long bufferSize;
+           if(*sampleRate == VOIP_SAMPLING_RATE_8K) {
+               bufferSize = VOIP_BUFFER_SIZE_8K;
+           }
+           else if(*sampleRate == VOIP_SAMPLING_RATE_16K) {
+               bufferSize = VOIP_BUFFER_SIZE_16K;
+           }
+           else {
+               LOGE("unsupported samplerate %d for voip",*sampleRate);
+               if (status) *status = err;
+               return in;
+           }
+           alsa_handle.module = mALSADevice;
+           alsa_handle.bufferSize = bufferSize;
+           alsa_handle.devices = devices;
+           alsa_handle.handle = 0;
+           alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+           alsa_handle.channels = VOIP_DEFAULT_CHANNEL_MODE;
+           alsa_handle.sampleRate = *sampleRate;
+           alsa_handle.latency = VOIP_RECORD_LATENCY;
+           alsa_handle.rxHandle = 0;
+           alsa_handle.ucMgr = mUcMgr;
+           snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+           if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+                strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP);
+           } else {
+                strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL);
+           }
+           free(use_case);
+           mDeviceList.push_back(alsa_handle);
+           it = mDeviceList.end();
+           it--;
+           mALSADevice->route(&(*it),mCurDevice, AudioSystem::MODE_IN_COMMUNICATION);
+           if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+               snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_IP_VOICECALL);
+           } else {
+               snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP);
+           }
+           if(sampleRate) {
+               it->sampleRate = *sampleRate;
+           }
+           if(channels)
+               it->channels = AudioSystem::popCount(*channels);
+           err = mALSADevice->startVoipCall(&(*it));
+           if (err) {
+               LOGE("Error opening pcm input device");
+               return NULL;
+           }
         }
-    } else {
-        if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
-            (newMode == AudioSystem::MODE_IN_CALL)) {
-            LOGE("Error opening input stream: In-call recording without voice call");
-            return 0;
-        } else if(devices == AudioSystem::DEVICE_IN_FM_RX) {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC, sizeof(alsa_handle.useCase));
-        } else if (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_A2DP_REC, sizeof(alsa_handle.useCase));
-        } else {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(alsa_handle.useCase));
-        }
-    }
-    free(use_case);
-    mDeviceList.push_back(alsa_handle);
-    ALSAHandleList::iterator it = mDeviceList.end();
-    it--;
-    mALSADevice->route(&(*it), devices, mode());
-    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
-       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
-       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
-        snd_use_case_set(mUcMgr, "_verb", it->useCase);
-    } else {
-        snd_use_case_set(mUcMgr, "_enamod", it->useCase);
-    }
-    if(sampleRate) {
-        it->sampleRate = *sampleRate;
-    }
-    if(channels) {
-        it->channels = AudioSystem::popCount(*channels);
-    }
-    err = mALSADevice->open(&(*it));
-    if (err) {
-        LOGE("Error opening pcm input device");
-    } else {
         in = new AudioStreamInALSA(this, &(*it), acoustics);
         err = in->set(format, channels, sampleRate, devices);
-    }
+        if(err == NO_ERROR) {
+            mVoipStreamCount++;   //increment VoipstreamCount only if success
+            LOGD("OpenInput mVoipStreamCount %d",mVoipStreamCount);
+        }
+        LOGE("openInput: After Get alsahandle");
+        if (status) *status = err;
+        return in;
+      } else
+      {
+        for(ALSAHandleList::iterator itDev = mDeviceList.begin();
+              itDev != mDeviceList.end(); ++itDev)
+        {
+            if((0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_HIFI_REC, MAX_UC_LEN))
+              ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, MAX_UC_LEN))
+              ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_FM, MAX_UC_LEN))
+              ||(0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_FM_REC, MAX_UC_LEN)))
+            {
+                LOGD("Input stream already exists, new stream not permitted: useCase:%s, devices:0x%x, module:%p", itDev->useCase, itDev->devices, itDev->module);
+                return in;
+            }
+        }
+        alsa_handle_t alsa_handle;
+        unsigned long bufferSize = DEFAULT_IN_BUFFER_SIZE;
 
-    if (status) *status = err;
-    return in;
+        alsa_handle.module = mALSADevice;
+        alsa_handle.bufferSize = bufferSize;
+        alsa_handle.devices = devices;
+        alsa_handle.handle = 0;
+        alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+        alsa_handle.channels = VOICE_CHANNEL_MODE;
+        alsa_handle.sampleRate = android::AudioRecord::DEFAULT_SAMPLE_RATE;
+        alsa_handle.latency = RECORD_LATENCY;
+        alsa_handle.rxHandle = 0;
+        alsa_handle.ucMgr = mUcMgr;
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
+                (newMode == AudioSystem::MODE_IN_CALL)) {
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(alsa_handle.useCase));
+            } else if((devices == AudioSystem::DEVICE_IN_FM_RX)) {
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
+            } else if(devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, sizeof(alsa_handle.useCase));
+            } else {
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(alsa_handle.useCase));
+            }
+        } else {
+            if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
+                (newMode == AudioSystem::MODE_IN_CALL)) {
+                LOGE("Error opening input stream: In-call recording without voice call");
+                return 0;
+            } else if(devices == AudioSystem::DEVICE_IN_FM_RX) {
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC, sizeof(alsa_handle.useCase));
+            } else if (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_A2DP_REC, sizeof(alsa_handle.useCase));
+            } else {
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(alsa_handle.useCase));
+            }
+        }
+        free(use_case);
+        mDeviceList.push_back(alsa_handle);
+        ALSAHandleList::iterator it = mDeviceList.end();
+        it--;
+        mALSADevice->route(&(*it), devices, mode());
+        if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
+            snd_use_case_set(mUcMgr, "_verb", it->useCase);
+        } else {
+            snd_use_case_set(mUcMgr, "_enamod", it->useCase);
+        }
+        if(sampleRate) {
+            it->sampleRate = *sampleRate;
+        }
+        if(channels) {
+            it->channels = AudioSystem::popCount(*channels);
+        }
+        err = mALSADevice->open(&(*it));
+        if (err) {
+           LOGE("Error opening pcm input device");
+        } else {
+           in = new AudioStreamInALSA(this, &(*it), acoustics);
+           err = in->set(format, channels, sampleRate, devices);
+        }
+        if (status) *status = err;
+        return in;
+      }
 }
 
 void
@@ -670,11 +828,23 @@ AudioHardwareALSA::closeInputStream(AudioStreamIn* in)
 
 status_t AudioHardwareALSA::setMicMute(bool state)
 {
-    if (mMicMute != state) {
-        mMicMute = state;
-        LOGD("setMicMute: mMicMute %d", mMicMute);
-        if(mALSADevice) {
-            mALSADevice->setMicMute(state);
+    int newMode = mode();
+    LOGD("setMicMute  newMode %d",newMode);
+    if(newMode == AudioSystem::MODE_IN_COMMUNICATION) {
+        if (mVoipMicMute != state) {
+             mVoipMicMute = state;
+            LOGD("setMicMute: mVoipMicMute %d", mVoipMicMute);
+            if(mALSADevice) {
+                mALSADevice->setVoipMicMute(state);
+            }
+        }
+    } else {
+        if (mMicMute != state) {
+              mMicMute = state;
+              LOGD("setMicMute: mMicMute %d", mMicMute);
+              if(mALSADevice) {
+                 mALSADevice->setMicMute(state);
+              }
         }
     }
     return NO_ERROR;
@@ -682,7 +852,12 @@ status_t AudioHardwareALSA::setMicMute(bool state)
 
 status_t AudioHardwareALSA::getMicMute(bool *state)
 {
-    *state = mMicMute;
+    int newMode = mode();
+    if(newMode == AudioSystem::MODE_IN_COMMUNICATION) {
+        *state = mVoipMicMute;
+    } else {
+        *state = mMicMute;
+    }
     return NO_ERROR;
 }
 
@@ -695,8 +870,8 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
 {
     size_t bufferSize;
     if (format != AudioSystem::PCM_16_BIT) {
-        LOGW("getInputBufferSize bad format: %d", format);
-        return 0;
+         LOGW("getInputBufferSize bad format: %d", format);
+         return 0;
     }
     if(sampleRate == 16000) {
         bufferSize = DEFAULT_IN_BUFFER_SIZE * 2 * channelCount;

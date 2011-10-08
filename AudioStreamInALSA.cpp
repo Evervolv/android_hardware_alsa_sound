@@ -60,6 +60,7 @@ status_t AudioStreamInALSA::setGain(float gain)
 
 ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 {
+    int period_size;
 
     LOGV("read:: buffer %p, bytes %d", buffer, bytes);
 
@@ -74,7 +75,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     char *use_case;
     int newMode = mParent->mode();
 
-    if(mHandle->handle == NULL) {
+    if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
+         (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
+         (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
         mParent->mLock.lock();
         snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
@@ -85,7 +88,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(mHandle->useCase));
             } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, sizeof(mHandle->useCase));
-            } else {
+            } else if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
+                strcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP);
+            }else {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(mHandle->useCase));
             }
         } else {
@@ -96,38 +101,53 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 return 0;
             } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC, sizeof(mHandle->useCase));
-	    } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
+        } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC, sizeof(mHandle->useCase));
+            } else if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
+                    strcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL);
             } else {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(mHandle->useCase));
             }
         }
         free(use_case);
-        mHandle->module->route(mHandle, mDevices, mParent->mode());
+        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                mHandle->module->route(mHandle, mDevices , AudioSystem::MODE_IN_COMMUNICATION);
+        } else {
+                mHandle->module->route(mHandle, mDevices , mParent->mode());
+        }
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
             snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
         }
-        mHandle->module->open(mHandle);
+       if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+            err = mHandle->module->startVoipCall(mHandle);
+        }
+        else
+            mHandle->module->open(mHandle);
         if(mHandle->handle == NULL) {
             LOGE("read:: PCM device open failed");
             mParent->mLock.unlock();
+
             return 0;
         }
         mParent->mLock.unlock();
     }
 
+    period_size = mHandle->periodSize;
     int read_pending = bytes;
     do {
-        if (read_pending < mHandle->handle->period_size) {
-            read_pending = mHandle->handle->period_size;
+        if (read_pending < period_size) {
+            read_pending = period_size;
         }
 
         n = pcm_read(mHandle->handle, buffer,
-            mHandle->handle->period_size);
+            period_size);
         LOGV("pcm_read() returned n = %d", n);
         if (n && n != -EAGAIN) {
             //Recovery part of pcm_read. TODO:split recovery.
@@ -138,8 +158,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             return static_cast<ssize_t>(n);
         }
         else {
-            read += static_cast<ssize_t>((mHandle->handle->period_size));
-            read_pending -= mHandle->handle->period_size;
+            read += static_cast<ssize_t>((period_size));
+            read_pending -= period_size;
         }
 
     } while (mHandle->handle && read < bytes);
@@ -164,7 +184,17 @@ status_t AudioStreamInALSA::open(int mode)
 status_t AudioStreamInALSA::close()
 {
     Mutex::Autolock autoLock(mParent->mLock);
-    LOGV("close");
+
+    if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+
+        if((mParent->mVoipStreamCount)) {
+               return NO_ERROR;
+        }
+        mParent->mVoipStreamCount = 0;
+        mParent->mVoipMicMute = 0;
+     }
+
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -177,7 +207,10 @@ status_t AudioStreamInALSA::close()
 
 status_t AudioStreamInALSA::standby()
 {
-    Mutex::Autolock autoLock(mParent->mLock);
+    if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+         return NO_ERROR;
+    }
 
     LOGV("standby");
 

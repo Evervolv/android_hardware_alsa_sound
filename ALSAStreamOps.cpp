@@ -51,6 +51,18 @@ ALSAStreamOps::~ALSAStreamOps()
 {
     Mutex::Autolock autoLock(mParent->mLock);
 
+    if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+       (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+        if((mParent->mVoipStreamCount)) {
+            mParent->mVoipStreamCount--;
+            if(mParent->mVoipStreamCount > 0) {
+                LOGD("ALSAStreamOps::close() Ignore");
+                return ;
+            }
+       }
+       mParent->mVoipStreamCount = 0;
+       mParent->mVoipMicMute = 0;
+    }
     close();
 
     for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
@@ -263,6 +275,8 @@ uint32_t ALSAStreamOps::channels() const
 void ALSAStreamOps::close()
 {
     LOGV("close");
+    mParent->mVoipMicMute = false;
+    mParent->mVoipStreamCount = 0;
     mParent->mALSADevice->close(mHandle);
 }
 

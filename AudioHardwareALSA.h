@@ -59,6 +59,15 @@ class AudioHardwareALSA;
 #define DEFAULT_IN_BUFFER_SIZE   320
 #define FM_BUFFER_SIZE        1024
 
+#define VOIP_SAMPLING_RATE_8K 8000
+#define VOIP_SAMPLING_RATE_16K 16000
+#define VOIP_DEFAULT_CHANNEL_MODE  1
+#define VOIP_BUFFER_SIZE_8K    320
+#define VOIP_BUFFER_SIZE_16K   640
+#define VOIP_BUFFER_MAX_SIZE   VOIP_BUFFER_SIZE_16K
+#define VOIP_PLAYBACK_LATENCY      6400
+#define VOIP_RECORD_LATENCY        6400
+
 #define DUALMIC_KEY         "dualmic_enabled"
 #define ANC_KEY             "anc_enabled"
 #define TTY_MODE_KEY        "tty_mode"
@@ -88,6 +97,7 @@ struct alsa_handle_t {
     uint32_t            sampleRate;
     unsigned int        latency;         // Delay in usec
     unsigned int        bufferSize;      // Size of sample buffer
+    unsigned int        periodSize;
     struct pcm *        rxHandle;
     snd_use_case_mgr_t  *ucMgr;
 };
@@ -103,9 +113,12 @@ struct alsa_device_t {
     status_t (*standby)(alsa_handle_t *);
     status_t (*route)(alsa_handle_t *, uint32_t, int);
     status_t (*startVoiceCall)(alsa_handle_t *);
+    status_t (*startVoipCall)(alsa_handle_t *);
     status_t (*startFm)(alsa_handle_t *);
     void     (*setVoiceVolume)(int);
+    void     (*setVoipVolume)(int);
     void     (*setMicMute)(int);
+    void     (*setVoipMicMute)(int);
     status_t (*setFmVolume)(int);
     void     (*setBtscoRate)(int);
     status_t (*setLpaVolume)(int);
@@ -409,7 +422,8 @@ protected:
     /* The flag holds all the audio related device settings from
      * Settings and Qualcomm Settings applications */
     uint32_t            mDevSettingsFlag;
-
+    uint32_t            mVoipStreamCount;
+    bool                mVoipMicMute;
     bool                mMicMute;
     int mIsVoiceCallActive;
     int mIsFmActive;
