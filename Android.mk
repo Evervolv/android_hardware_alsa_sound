@@ -14,7 +14,7 @@ ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
 
   LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
   LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
-  LOCAL_C_INCLUDES += $(LOCAL_PATH)/../msm7k/libalsa-intf/
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
 
   LOCAL_SRC_FILES := \
 	AudioHardwareALSA.cpp \
@@ -80,7 +80,7 @@ endif
 
   LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
   LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
-  LOCAL_C_INCLUDES += $(LOCAL_PATH)/../msm7k/libalsa-intf/
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
 
   LOCAL_SRC_FILES:= alsa_default.cpp \
 	ALSAControl.cpp
