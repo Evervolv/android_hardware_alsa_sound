@@ -103,10 +103,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             }
         }
         free(use_case);
-        if (mParent->getDmicStatus() == true) {
-            mDevices |= AudioSystem::DEVICE_IN_BACK_MIC;
-        }
-        mHandle->module->route(mHandle, mDevices, mParent->mode(), (mParent->getTtyMode()));
+        mHandle->module->route(mHandle, mDevices, mParent->mode());
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {

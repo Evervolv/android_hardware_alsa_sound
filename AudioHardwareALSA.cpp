@@ -70,10 +70,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
             mALSADevice->init(mALSADevice, mDeviceList);
             mIsVoiceCallActive = 0;
             mIsFmActive = 0;
-            mDmicActive = false;
-            mAncActive = false;
+            mDevSettingsFlag = 0;
+            mDevSettingsFlag |= TTY_OFF;
             mBluetoothVGS = false;
-            mTtyMode = TTY_OFF;
             snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
             if (mUcMgr < 0) {
                 LOGE("Failed to open ucm instance: %d", errno);
@@ -185,31 +184,34 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8(TTY_MODE_KEY);
     if (param.get(key, value) == NO_ERROR) {
+        mDevSettingsFlag &= TTY_CLEAR;
         if (value == "full") {
-            mTtyMode = TTY_FULL;
+            mDevSettingsFlag |= TTY_FULL;
         } else if (value == "hco") {
-            mTtyMode = TTY_HCO;
+            mDevSettingsFlag |= TTY_HCO;
         } else if (value == "vco") {
-            mTtyMode = TTY_VCO;
+            mDevSettingsFlag |= TTY_VCO;
         } else {
-            mTtyMode = TTY_OFF;
+            mDevSettingsFlag |= TTY_OFF;
         }
+        LOGI("Changed TTY Mode=%s", value.string());
+        mALSADevice->setFlags(mDevSettingsFlag);
         if(mMode != AudioSystem::MODE_IN_CALL){
            return NO_ERROR;
         }
-        LOGI("Changed TTY Mode=%s", value.string());
         doRouting(0);
     }
 
     key = String8(DUALMIC_KEY);
     if (param.get(key, value) == NO_ERROR) {
         if (value == "true") {
-            mDmicActive = true;
+            mDevSettingsFlag |= DMIC_FLAG;
             LOGI("DualMic feature Enabled");
         } else {
-            mDmicActive = false;
+            mDevSettingsFlag &= (~DMIC_FLAG);
             LOGI("DualMic feature Disabled");
         }
+        mALSADevice->setFlags(mDevSettingsFlag);
         doRouting(0);
     }
 
@@ -217,11 +219,12 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.get(key, value) == NO_ERROR) {
         if (value == "true") {
             LOGV("Enabling ANC setting in the setparameter\n");
-            mAncActive= true;
+            mDevSettingsFlag |= ANC_FLAG;
         } else {
             LOGV("Disabling ANC setting in the setparameter\n");
-            mAncActive= false;
+            mDevSettingsFlag &= (~ANC_FLAG);
         }
+        mALSADevice->setFlags(mDevSettingsFlag);
         doRouting(0);
     }
 
@@ -274,7 +277,7 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 
     String8 key = String8(DUALMIC_KEY);
     if (param.get(key, value) == NO_ERROR) {
-        value = String8(mDmicActive ? "true" : "false");
+        value = String8((mDevSettingsFlag & DMIC_FLAG) ? "true" : "false");
         param.add(key, value);
     }
 
@@ -308,74 +311,6 @@ void AudioHardwareALSA::doRouting(int device)
     }
     if (device == 0)
         device = mCurDevice;
-    if (mAncActive == true) {
-        LOGV("doRouting: setting anc device device %d", device);
-        if (device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
-            device &= (~AudioSystem::DEVICE_OUT_WIRED_HEADSET);
-            device |= AudioSystem::DEVICE_OUT_ANC_HEADSET;
-        } else if (device & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
-            device &= (~AudioSystem::DEVICE_IN_WIRED_HEADSET);
-            device |= AudioSystem::DEVICE_IN_ANC_HEADSET;
-        } else if (device == 0) {
-            ALSAHandleList::iterator it = mDeviceList.end();
-            it--;
-            if (it->devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
-                device = AudioSystem::DEVICE_OUT_ANC_HEADSET;
-            } else if (it->devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
-                device = AudioSystem::DEVICE_IN_ANC_HEADSET;
-            } else {
-                LOGV("No headset connected, ignore ANC setting");
-                return;
-            }
-        }
-    } else if (mAncActive == false && device == 0){
-        ALSAHandleList::iterator it = mDeviceList.end();
-        it--;
-        if (it->devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) {
-            device = AudioSystem::DEVICE_OUT_WIRED_HEADSET;
-        } else if (it->devices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
-            device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
-        }
-    }
-    if (newMode == AudioSystem::MODE_IN_CALL) {
-        if ((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-            (device & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
-            device = device | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
-                      AudioSystem::DEVICE_IN_WIRED_HEADSET);
-        } else if (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
-            device = device | (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
-        } else if ((device & AudioSystem::DEVICE_OUT_EARPIECE) ||
-                  (device & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
-            device = device | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                      AudioSystem::DEVICE_OUT_EARPIECE);
-        } else if (device & AudioSystem::DEVICE_OUT_SPEAKER) {
-            device = device | (AudioSystem::DEVICE_IN_DEFAULT |
-                       AudioSystem::DEVICE_OUT_SPEAKER);
-        } else if ((device & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
-                   (device & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
-                   (device & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
-            device = device | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
-                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
-        } else if ((device & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-                   (device & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
-            device = device | (AudioSystem::DEVICE_OUT_ANC_HEADSET |
-                      AudioSystem::DEVICE_IN_ANC_HEADSET);
-        } else if (device & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
-            device = device | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
-        } else if (device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-            device = device | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
-        }
-    }
-    if (((device & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-         (device & AudioSystem::DEVICE_IN_DEFAULT)) && (mDmicActive == true)) {
-        device |= AudioSystem::DEVICE_IN_BACK_MIC;
-    } else if (((device & AudioSystem::DEVICE_IN_BACK_MIC) ||
-                (device & AudioSystem::DEVICE_IN_DEFAULT)) && (mDmicActive == false)) {
-        device &= (~AudioSystem::DEVICE_IN_BACK_MIC);
-    }
     LOGV("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
           device, newMode, mIsVoiceCallActive, mIsFmActive);
     if((newMode == AudioSystem::MODE_IN_CALL) && (mIsVoiceCallActive == 0)) {
@@ -408,7 +343,7 @@ void AudioHardwareALSA::doRouting(int device)
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         LOGV("Enabling voice call");
-        mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
+        mALSADevice->route(&(*it), (uint32_t)device, newMode);
         if (!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) {
             snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_VOICECALL);
         } else {
@@ -423,7 +358,7 @@ void AudioHardwareALSA::doRouting(int device)
                (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
                 LOGV("Disabling voice call");
                 mALSADevice->close(&(*it));
-                mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
+                mALSADevice->route(&(*it), (uint32_t)device, newMode);
                 mDeviceList.erase(it);
                 break;
             }
@@ -459,7 +394,7 @@ void AudioHardwareALSA::doRouting(int device)
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
-        mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
+        mALSADevice->route(&(*it), (uint32_t)device, newMode);
         if(!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) {
             snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
         } else {
@@ -474,7 +409,7 @@ void AudioHardwareALSA::doRouting(int device)
             if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
               (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
                 mALSADevice->close(&(*it));
-                mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
+                mALSADevice->route(&(*it), (uint32_t)device, newMode);
                 mDeviceList.erase(it);
                 break;
             }
@@ -483,7 +418,7 @@ void AudioHardwareALSA::doRouting(int device)
     } else {
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
-        mALSADevice->route(&(*it), (uint32_t)device, newMode, mTtyMode);
+        mALSADevice->route(&(*it), (uint32_t)device, newMode);
     }
     mCurDevice = device;
 }
@@ -537,10 +472,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     LOGV("useCase %s", it->useCase);
-    if ((mode() == AudioSystem::MODE_IN_CALL) && (mDmicActive == true)) {
-        devices |= AudioSystem::DEVICE_IN_BACK_MIC;
-    }
-    mALSADevice->route(&(*it), devices, mode(), mTtyMode);
+    mALSADevice->route(&(*it), devices, mode());
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
         snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI);
     } else {
@@ -610,10 +542,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     LOGV("useCase %s", it->useCase);
-    if ((AudioSystem::MODE_IN_CALL == mode()) && (mDmicActive == true)) {
-        devices |= AudioSystem::DEVICE_IN_BACK_MIC;
-    }
-    mALSADevice->route(&(*it), devices, mode(), mTtyMode);
+    mALSADevice->route(&(*it), devices, mode());
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
         snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
     } else {
@@ -709,10 +638,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     mDeviceList.push_back(alsa_handle);
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
-    if ((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) && (mDmicActive == true)) {
-        devices |= AudioSystem::DEVICE_IN_BACK_MIC;
-    }
-    mALSADevice->route(&(*it), devices, mode(), mTtyMode);
+    mALSADevice->route(&(*it), devices, mode());
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
        !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
        !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {

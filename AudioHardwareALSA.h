@@ -59,10 +59,13 @@ class AudioHardwareALSA;
 #define BTHEADSET_VGS       "bt_headset_vgs"
 #define WIDEVOICE_KEY "wide_voice_enable"
 
-#define TTY_OFF 0
-#define TTY_VCO 1
-#define TTY_HCO 2
-#define TTY_FULL 3
+#define ANC_FLAG        0x00000001
+#define DMIC_FLAG       0x00000002
+#define TTY_OFF         0x00000010
+#define TTY_FULL        0x00000020
+#define TTY_VCO         0x00000040
+#define TTY_HCO         0x00000080
+#define TTY_CLEAR       0xFFFFFF0F
 
 struct alsa_device_t;
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
@@ -91,7 +94,7 @@ struct alsa_device_t {
     status_t (*open)(alsa_handle_t *);
     status_t (*close)(alsa_handle_t *);
     status_t (*standby)(alsa_handle_t *);
-    status_t (*route)(alsa_handle_t *, uint32_t, int, int);
+    status_t (*route)(alsa_handle_t *, uint32_t, int);
     status_t (*startVoiceCall)(alsa_handle_t *);
     status_t (*startFm)(alsa_handle_t *);
     void     (*setVoiceVolume)(int);
@@ -100,6 +103,7 @@ struct alsa_device_t {
     void     (*setBtscoRate)(int);
     status_t (*setLpaVolume)(int);
     void     (*enableWideVoice)(bool);
+    void     (*setFlags)(uint32_t);
 };
 
 // ----------------------------------------------------------------------------
@@ -369,14 +373,6 @@ public:
         return mMode;
     }
 
-    int getTtyMode()
-    {
-        return mTtyMode;
-    }
-    int getDmicStatus()
-    {
-        return mDmicActive;
-    }
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     void                doRouting(int device);
@@ -394,13 +390,13 @@ protected:
     snd_use_case_mgr_t *mUcMgr;
 
     uint32_t            mCurDevice;
+    /* The flag holds all the audio related device settings from
+     * Settings and Qualcomm Settings applications */
+    uint32_t            mDevSettingsFlag;
 
     bool                mMicMute;
-    int mTtyMode;
     int mIsVoiceCallActive;
     int mIsFmActive;
-    bool mDmicActive;
-    bool mAncActive;
     bool mBluetoothVGS;
 };
 

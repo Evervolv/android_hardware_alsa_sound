@@ -39,7 +39,7 @@ static status_t s_init(alsa_device_t *, ALSAHandleList &);
 static status_t s_open(alsa_handle_t *);
 static status_t s_close(alsa_handle_t *);
 static status_t s_standby(alsa_handle_t *);
-static status_t s_route(alsa_handle_t *, uint32_t, int, int);
+static status_t s_route(alsa_handle_t *, uint32_t, int);
 static status_t s_start_voice_call(alsa_handle_t *);
 static status_t s_start_fm(alsa_handle_t *);
 static void     s_set_voice_volume(int);
@@ -48,13 +48,14 @@ static status_t s_set_fm_vol(int);
 static void     s_set_btsco_rate(int);
 static status_t s_set_lpa_vol(int);
 static void     s_enable_wide_voice(bool flag);
+static void     s_set_flags(uint32_t flags);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
 static char curTxUCMDevice[50];
 static int fluence_mode;
 static int fmVolume;
-
+static uint32_t mDevSettingsFlag = TTY_OFF;
 static int btsco_samplerate = 8000;
 
 static hw_module_methods_t s_module_methods = {
@@ -101,6 +102,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setBtscoRate = s_set_btsco_rate;
     dev->setLpaVolume = s_set_lpa_vol;
     dev->enableWideVoice = s_enable_wide_voice;
+    dev->setFlags = s_set_flags;
 
     *device = &dev->common;
 
@@ -133,7 +135,6 @@ static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 static char *getUCMDevice(uint32_t devices, int input);
 static void disableDevice(alsa_handle_t *handle);
 
-static int ttyMode = 0;
 static int callMode = AudioSystem::MODE_NORMAL;
 // ----------------------------------------------------------------------------
 
@@ -680,12 +681,12 @@ static status_t s_standby(alsa_handle_t *handle)
     return err;
 }
 
-static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode, int tty)
+static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode)
 {
     status_t status = NO_ERROR;
 
-    LOGV("s_route: devices 0x%x in mode %d ttyMode %d", devices, mode, tty);
-    ttyMode = tty; callMode = mode;
+    LOGV("s_route: devices 0x%x in mode %d", devices, mode);
+    callMode = mode;
     switchDevice(handle, devices, mode);
     return status;
 }
@@ -715,23 +716,27 @@ static void disableDevice(alsa_handle_t *handle)
 char *getUCMDevice(uint32_t devices, int input)
 {
     if (!input) {
-        if ((ttyMode != TTY_OFF) &&
+        if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
             ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
              (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) ||
              (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
              (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
-             if (ttyMode == TTY_VCO) {
+             if (mDevSettingsFlag & TTY_VCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HEADSET_RX);
-             } else if (ttyMode == TTY_FULL) {
+             } else if (mDevSettingsFlag & TTY_FULL) {
                  return strdup(SND_USE_CASE_DEV_TTY_FULL_RX);
-             } else if (ttyMode == TTY_HCO) {
+             } else if (mDevSettingsFlag & TTY_HCO) {
                  return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
              }
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
             ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
-            return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
+            if (mDevSettingsFlag & ANC_FLAG) {
+                return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
+            } else {
+                return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
+            }
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
             ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
             (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
@@ -745,11 +750,11 @@ char *getUCMDevice(uint32_t devices, int input)
             return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
         } else if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
                    (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) {
-            /* TODO: Check if TTY is enabled and get the TTY mode
-             *       return different UCM device name for the
-             *       corresponding TTY mode if required
-             */
-            return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
+            if (mDevSettingsFlag & ANC_FLAG) {
+                return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+            } else {
+                return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
+            }
         } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
                    (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
             return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
@@ -775,15 +780,15 @@ char *getUCMDevice(uint32_t devices, int input)
             LOGV("No valid output device: %u", devices);
         }
     } else {
-        if ((ttyMode != TTY_OFF) &&
+        if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
             ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
              (devices & AudioSystem::DEVICE_IN_ANC_HEADSET))) {
-             if (ttyMode == TTY_HCO) {
+             if (mDevSettingsFlag & TTY_HCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HEADSET_TX);
-             } else if (ttyMode == TTY_FULL) {
+             } else if (mDevSettingsFlag & TTY_FULL) {
                  return strdup(SND_USE_CASE_DEV_TTY_FULL_TX);
-             } else if (ttyMode == TTY_VCO) {
+             } else if (mDevSettingsFlag & TTY_VCO) {
                  if (!strncmp(mic_type, "analog", 6)) {
                      return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
                  } else {
@@ -794,7 +799,7 @@ char *getUCMDevice(uint32_t devices, int input)
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-                if (devices & AudioSystem::DEVICE_IN_BACK_MIC) {
+                if (mDevSettingsFlag & DMIC_FLAG) {
                     if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                         return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
                     } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
@@ -816,7 +821,7 @@ char *getUCMDevice(uint32_t devices, int input)
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-                if (devices & AudioSystem::DEVICE_IN_BACK_MIC) {
+                if (mDevSettingsFlag & DMIC_FLAG) {
                     if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                         return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
                     } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
@@ -876,6 +881,12 @@ void s_enable_wide_voice(bool flag)
     } else {
         control.set("Widevoice Enable", 0, 0);
     }
+}
+
+void s_set_flags(uint32_t flags)
+{
+    LOGV("s_set_flags: flags %d", flags);
+    mDevSettingsFlag = flags;
 }
 
 }
