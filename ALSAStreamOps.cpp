@@ -159,8 +159,6 @@ status_t ALSAStreamOps::set(int      *format,
 
 status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
-    Mutex::Autolock autoLock(mParent->mLock);
-
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
     int device;
