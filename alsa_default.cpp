@@ -799,6 +799,10 @@ char *getUCMDevice(uint32_t devices, int input)
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
+                if ((callMode == AudioSystem::MODE_IN_CALL) &&
+                    (!strcmp(curRxUCMDevice, SND_USE_CASE_DEV_HDMI))) {
+                    return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
+                }
                 if (mDevSettingsFlag & DMIC_FLAG) {
                     if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                         return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
