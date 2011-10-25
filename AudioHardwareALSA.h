@@ -78,7 +78,7 @@ struct alsa_handle_t {
     uint32_t            sampleRate;
     unsigned int        latency;         // Delay in usec
     unsigned int        bufferSize;      // Size of sample buffer
-    struct pcm *        recHandle;
+    struct pcm *        rxHandle;
     snd_use_case_mgr_t  *ucMgr;
 };
 

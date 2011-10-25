@@ -398,7 +398,7 @@ void AudioHardwareALSA::doRouting(int device)
         alsa_handle.channels = VOICE_CHANNEL_MODE;
         alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
         alsa_handle.latency = VOICE_LATENCY;
-        alsa_handle.recHandle = 0;
+        alsa_handle.rxHandle = 0;
         alsa_handle.ucMgr = mUcMgr;
         mIsVoiceCallActive = 1;
         mDeviceList.push_back(alsa_handle);
@@ -450,7 +450,7 @@ void AudioHardwareALSA::doRouting(int device)
         alsa_handle.channels = DEFAULT_CHANNEL_MODE;
         alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
         alsa_handle.latency = VOICE_LATENCY;
-        alsa_handle.recHandle = 0;
+        alsa_handle.rxHandle = 0;
         alsa_handle.ucMgr = mUcMgr;
         mIsFmActive = 1;
         mDeviceList.push_back(alsa_handle);
@@ -519,7 +519,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     alsa_handle.channels = DEFAULT_CHANNEL_MODE;
     alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
     alsa_handle.latency = PLAYBACK_LATENCY;
-    alsa_handle.recHandle = 0;
+    alsa_handle.rxHandle = 0;
     alsa_handle.ucMgr = mUcMgr;
 
     char *use_case;
@@ -592,7 +592,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     alsa_handle.channels = DEFAULT_CHANNEL_MODE;
     alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
     alsa_handle.latency = VOICE_LATENCY;
-    alsa_handle.recHandle = 0;
+    alsa_handle.rxHandle = 0;
     alsa_handle.ucMgr = mUcMgr;
 
     char *use_case;
@@ -674,7 +674,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     alsa_handle.channels = VOICE_CHANNEL_MODE;
     alsa_handle.sampleRate = AudioRecord::DEFAULT_SAMPLE_RATE;
     alsa_handle.latency = RECORD_LATENCY;
-    alsa_handle.recHandle = 0;
+    alsa_handle.rxHandle = 0;
     alsa_handle.ucMgr = mUcMgr;
 
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);

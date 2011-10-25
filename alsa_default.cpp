@@ -437,8 +437,8 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
         goto Error;
     }
 
-    // Store the PCM playback device pointer in recHandle
-    handle->recHandle = handle->handle;
+    // Store the PCM playback device pointer in rxHandle
+    handle->rxHandle = handle->handle;
     free(devName);
 
     // Open PCM capture device
@@ -533,8 +533,8 @@ static status_t s_start_fm(alsa_handle_t *handle)
         goto Error;
     }
 
-    // Store the PCM playback device pointer in recHandle
-    handle->recHandle = handle->handle;
+    // Store the PCM playback device pointer in rxHandle
+    handle->rxHandle = handle->handle;
     free(devName);
 
     // Open PCM capture device
@@ -634,12 +634,12 @@ static status_t s_close(alsa_handle_t *handle)
 
         if(((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) || (!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
             (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM))) &&
-            handle->recHandle != NULL) {
-            err = pcm_close(handle->recHandle);
+            handle->rxHandle != NULL) {
+            err = pcm_close(handle->rxHandle);
             if(err != NO_ERROR) {
                 LOGE("s_close: pcm_close failed with err %d", err);
             }
-            handle->recHandle = NULL;
+            handle->rxHandle = NULL;
         }
         disableDevice(handle);
     } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
