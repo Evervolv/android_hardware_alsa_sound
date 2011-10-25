@@ -224,6 +224,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 
     unsigned long bufferSize = pcm->buffer_size;
     unsigned long periodSize = pcm->period_size;
+    int numPeriods;
 
     params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
     if (!params) {
@@ -232,11 +233,12 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     }
 
     // Get the current software parameters
+    numPeriods = bufferSize/periodSize;
     params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;
-    params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
-    params->start_threshold = handle->channels - 1 ? periodSize/2 : periodSize/4;
-    params->stop_threshold = handle->channels - 1 ? bufferSize/2 : bufferSize/4;
+    params->avail_min = periodSize/2;
+    params->start_threshold = periodSize/2 * numPeriods/2;
+    params->stop_threshold = bufferSize/2;
     params->silence_threshold = 0;
     params->silence_size = 0;
 
