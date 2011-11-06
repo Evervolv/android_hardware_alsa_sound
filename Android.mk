@@ -92,5 +92,7 @@ endif
 
   LOCAL_MODULE:= alsa.default
 
+  LOCAL_MODULE_TAGS := optional
+
   include $(BUILD_SHARED_LIBRARY)
 endif
