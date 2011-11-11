@@ -586,7 +586,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             itDev != mDeviceList.end(); ++itDev)
     {
         if((0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_HIFI_REC, MAX_UC_LEN))
-            ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, MAX_UC_LEN)))
+            ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, MAX_UC_LEN))
+            ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_FM, MAX_UC_LEN))
+            ||(0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_FM_REC, MAX_UC_LEN)))
         {
             LOGD("Input stream already exists, new stream not permitted: useCase:%s, devices:0x%x, module:%p", itDev->useCase, itDev->devices, itDev->module);
             return in;
