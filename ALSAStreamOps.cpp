@@ -35,7 +35,7 @@
 
 #include "AudioHardwareALSA.h"
 
-namespace android
+namespace android_audio_legacy
 {
 
 // ----------------------------------------------------------------------------
@@ -282,4 +282,4 @@ status_t ALSAStreamOps::open(int mode)
     return mParent->mALSADevice->open(mHandle);
 }
 
-}       // namespace android
+}       // namespace androidi_audio_legacy

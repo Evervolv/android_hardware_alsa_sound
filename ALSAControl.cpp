@@ -35,7 +35,7 @@
 
 #include "AudioHardwareALSA.h"
 
-namespace android
+namespace android_audio_legacy
 {
 
 ALSAControl::ALSAControl(const char *device)

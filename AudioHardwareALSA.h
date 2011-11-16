@@ -22,6 +22,12 @@
 #include <utils/List.h>
 #include <hardware_legacy/AudioHardwareBase.h>
 
+#include <hardware_legacy/AudioHardwareInterface.h>
+#include <hardware_legacy/AudioSystemLegacy.h>
+#include <system/audio.h>
+#include <hardware/audio.h>
+#include <utils/threads.h>
+
 extern "C" {
    #include <sound/asound.h>
    #include "alsa_audio.h"
@@ -30,9 +36,10 @@ extern "C" {
 
 #include <hardware/hardware.h>
 
-namespace android
+namespace android_audio_legacy
 {
-
+using android::List;
+using android::Mutex;
 class AudioHardwareALSA;
 
 /**
@@ -278,6 +285,15 @@ public:
     // Unit: the number of input audio frames
     virtual unsigned int  getInputFramesLost() const;
 
+    virtual status_t addAudioEffect(effect_handle_t effect)
+    {
+        return BAD_VALUE;
+    }
+   
+    virtual status_t removeAudioEffect(effect_handle_t effect)
+    {
+        return BAD_VALUE;
+    }
     status_t            setAcousticParams(void* params);
 
     status_t            open(int mode);
@@ -314,8 +330,9 @@ public:
      * the software mixer will emulate this capability.
      */
     virtual status_t    setMasterVolume(float volume);
+#ifdef FM_RADIO
     virtual status_t    setFmVolume(float volume);
-
+#endif
     /**
      * setMode is called when the audio mode changes. NORMAL mode is for
      * standard audio playback, RINGTONE when a ringtone is playing, and IN_CALL
@@ -402,5 +419,5 @@ protected:
 
 // ----------------------------------------------------------------------------
 
-};        // namespace android
+};        // namespace android_audio_legacy
 #endif    // ANDROID_AUDIO_HARDWARE_ALSA_H

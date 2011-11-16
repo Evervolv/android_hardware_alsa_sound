@@ -5,94 +5,112 @@
 
 ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
 
-  LOCAL_PATH := $(call my-dir)
+LOCAL_PATH := $(call my-dir)
 
-  include $(CLEAR_VARS)
+include $(CLEAR_VARS)
 
-  LOCAL_ARM_MODE := arm
-  LOCAL_CFLAGS := -D_POSIX_SOURCE
+LOCAL_ARM_MODE := arm
+LOCAL_CFLAGS := -D_POSIX_SOURCE
 
-  LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
-  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
-  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
+LOCAL_SRC_FILES := \
+  AudioHardwareALSA.cpp 	\
+  AudioStreamOutALSA.cpp 	\
+  AudioStreamInALSA.cpp 	\
+  ALSAStreamOps.cpp		\
+  audio_hw_hal.cpp
 
-  LOCAL_SRC_FILES := \
-	AudioHardwareALSA.cpp \
-	AudioStreamOutALSA.cpp \
-	AudioStreamInALSA.cpp \
-	ALSAStreamOps.cpp
+LOCAL_STATIC_LIBRARIES := \
+    libmedia_helper \
+    libaudiohw_legacy
 
-  LOCAL_MODULE := libaudio
-
-  LOCAL_STATIC_LIBRARIES += libaudiointerface
-
-  LOCAL_SHARED_LIBRARIES := \
-    libalsa-intf \
+LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
     libmedia \
     libhardware \
-    libhardware_legacy \
-    libc
+    libc        \
+    libpower    \
+    libalsa-intf
 
-ifeq ($(BOARD_HAVE_BLUETOOTH),true)
-  LOCAL_SHARED_LIBRARIES += liba2dp libbinder
-endif
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-alsa
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audcal
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-acdb-util
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
+LOCAL_C_INCLUDES += hardware/libhardware/include
+LOCAL_C_INCLUDES += hardware/libhardware_legacy/include
+LOCAL_C_INCLUDES += frameworks/base/include
+LOCAL_C_INCLUDES += system/core/include
 
-  include $(BUILD_SHARED_LIBRARY)
+LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+
+LOCAL_MODULE := audio.primary.msm8960
+LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_SHARED_LIBRARY)
 
 # This is the ALSA audio policy manager
 
-  include $(CLEAR_VARS)
+include $(CLEAR_VARS)
 
-  LOCAL_CFLAGS := -D_POSIX_SOURCE
+LOCAL_CFLAGS := -D_POSIX_SOURCE
 
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
 endif
 
-  LOCAL_SRC_FILES := AudioPolicyManagerALSA.cpp
+LOCAL_SRC_FILES := \
+    AudioPolicyManagerALSA.cpp	\
+    audio_policy_hal.cpp
 
-  LOCAL_MODULE := libaudiopolicy
+LOCAL_MODULE := audio_policy.msm8960
+LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+LOCAL_MODULE_TAGS := optional
 
-  LOCAL_WHOLE_STATIC_LIBRARIES += libaudiopolicybase
+LOCAL_STATIC_LIBRARIES := \
+    libmedia_helper \
+    libaudiopolicy_legacy
 
-  LOCAL_SHARED_LIBRARIES := \
+LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
     libmedia
 
-  include $(BUILD_SHARED_LIBRARY)
+LOCAL_C_INCLUDES += hardware/libhardware_legacy/audio
 
-# This is the default ALSA module which behaves closely like the original
+include $(BUILD_SHARED_LIBRARY)
 
-  include $(CLEAR_VARS)
 
-  LOCAL_PRELINK_MODULE := false
+# This is the ALSA module which behaves closely like the original
 
-  LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+include $(CLEAR_VARS)
 
-  LOCAL_CFLAGS := -D_POSIX_SOURCE -Wno-multichar
+LOCAL_PRELINK_MODULE := false
+
+LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+
+LOCAL_CFLAGS := -D_POSIX_SOURCE -Wno-multichar
 
 ifneq ($(ALSA_DEFAULT_SAMPLE_RATE),)
     LOCAL_CFLAGS += -DALSA_DEFAULT_SAMPLE_RATE=$(ALSA_DEFAULT_SAMPLE_RATE)
 endif
 
-  LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
-  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
-  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
+LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
 
-  LOCAL_SRC_FILES:= alsa_default.cpp \
-	ALSAControl.cpp
+LOCAL_SRC_FILES:= \
+    alsa_default.cpp \
+    ALSAControl.cpp
 
-  LOCAL_SHARED_LIBRARIES := \
-    libalsa-intf \
+LOCAL_SHARED_LIBRARIES := \
     libcutils \
-    liblog
+    liblog    \
+    libalsa-intf
 
-  LOCAL_MODULE:= alsa.default
-
-  LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE:= alsa.msm8960
+LOCAL_MODULE_TAGS := optional
 
   include $(BUILD_SHARED_LIBRARY)
 endif

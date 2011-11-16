@@ -41,12 +41,12 @@ extern "C"
     //
     // Function for dlsym() to look up for creating a new AudioHardwareInterface.
     //
-    android::AudioHardwareInterface *createAudioHardware(void) {
-        return android::AudioHardwareALSA::create();
+    android_audio_legacy::AudioHardwareInterface *createAudioHardware(void) {
+        return android_audio_legacy::AudioHardwareALSA::create();
     }
 }         // extern "C"
 
-namespace android
+namespace android_audio_legacy
 {
 
 // ----------------------------------------------------------------------------
@@ -137,6 +137,7 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     return NO_ERROR;
 }
 
+#ifdef FM_RADIO
 status_t  AudioHardwareALSA::setFmVolume(float value)
 {
     status_t status = NO_ERROR;
@@ -155,6 +156,7 @@ status_t  AudioHardwareALSA::setFmVolume(float value)
 
     return status;
 }
+#endif
 
 status_t AudioHardwareALSA::setMasterVolume(float volume)
 {
@@ -302,13 +304,14 @@ void AudioHardwareALSA::doRouting(int device)
 {
     Mutex::Autolock autoLock(mLock);
     int newMode = mode();
-
+#ifdef FM_RADIO
     if ((device == AudioSystem::DEVICE_IN_VOICE_CALL) ||
         (device == AudioSystem::DEVICE_IN_FM_RX) ||
         (device == AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
         LOGV("Ignoring routing for FM/INCALL recording");
         return;
     }
+#endif
     if (device == 0)
         device = mCurDevice;
     LOGV("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
@@ -364,6 +367,7 @@ void AudioHardwareALSA::doRouting(int device)
             }
         }
         mIsVoiceCallActive = 0;
+#ifdef FM_RADIO		
     } else if(device & AudioSystem::DEVICE_OUT_FM && mIsFmActive == 0) {
         // Start FM Radio on current active device
         unsigned long bufferSize = FM_BUFFER_SIZE;
@@ -415,6 +419,7 @@ void AudioHardwareALSA::doRouting(int device)
             }
         }
         mIsFmActive = 0;
+#endif		
     } else {
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
@@ -606,7 +611,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     alsa_handle.handle = 0;
     alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
     alsa_handle.channels = VOICE_CHANNEL_MODE;
-    alsa_handle.sampleRate = AudioRecord::DEFAULT_SAMPLE_RATE;
+    alsa_handle.sampleRate = android::AudioRecord::DEFAULT_SAMPLE_RATE;
     alsa_handle.latency = RECORD_LATENCY;
     alsa_handle.rxHandle = 0;
     alsa_handle.ucMgr = mUcMgr;
@@ -616,10 +621,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
             (newMode == AudioSystem::MODE_IN_CALL)) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(alsa_handle.useCase));
+#ifdef FM_RADIO
         } else if((devices == AudioSystem::DEVICE_IN_FM_RX)) {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
         } else if(devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, sizeof(alsa_handle.useCase));
+#endif			
         } else {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(alsa_handle.useCase));
         }
@@ -628,10 +635,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             (newMode == AudioSystem::MODE_IN_CALL)) {
             LOGE("Error opening input stream: In-call recording without voice call");
             return 0;
+#ifdef FM_RADIO			
         } else if(devices == AudioSystem::DEVICE_IN_FM_RX) {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC, sizeof(alsa_handle.useCase));
         } else if (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_A2DP_REC, sizeof(alsa_handle.useCase));
+#endif			
         } else {
             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(alsa_handle.useCase));
         }
@@ -641,9 +650,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     mALSADevice->route(&(*it), devices, mode());
-    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
-       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
-       !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
+    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) 
+#ifdef FM_RADIO	
+	   || !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC)
+	   || !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)
+#endif	   
+	   ) {
         snd_use_case_set(mUcMgr, "_verb", it->useCase);
     } else {
         snd_use_case_set(mUcMgr, "_enamod", it->useCase);
@@ -707,4 +719,4 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
     return DEFAULT_IN_BUFFER_SIZE * 8;
 }
 
-}       // namespace android
+}       // namespace android_audio_legacy

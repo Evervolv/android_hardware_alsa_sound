@@ -40,7 +40,7 @@
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
 #endif
 
-namespace android
+namespace android_audio_legacy
 {
 
 // ----------------------------------------------------------------------------
@@ -221,4 +221,4 @@ status_t AudioStreamOutALSA::getRenderPosition(uint32_t *dspFrames)
     return NO_ERROR;
 }
 
-}       // namespace android
+}       // namespace android_audio_legacy

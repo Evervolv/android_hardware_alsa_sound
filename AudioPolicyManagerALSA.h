@@ -24,7 +24,7 @@
 #include <hardware_legacy/AudioPolicyManagerBase.h>
 
 
-namespace android {
+namespace android_audio_legacy {
 
 // ----------------------------------------------------------------------------
 
@@ -66,7 +66,7 @@ public:
         //  where conditions are changing (setDeviceConnectionState(), setPhoneState()...) AND
         //  before updateDeviceForStrategy() is called.
         virtual uint32_t getDeviceForStrategy(routing_strategy strategy, bool fromCache = true);
-
+#ifdef LPA_DECODE
         virtual audio_io_handle_t getSession(AudioSystem::stream_type stream,
                                             uint32_t format,
                                             AudioSystem::output_flags flags,
@@ -74,6 +74,7 @@ public:
         virtual void pauseSession(audio_io_handle_t output, AudioSystem::stream_type stream);
         virtual void resumeSession(audio_io_handle_t output, AudioSystem::stream_type stream);
         virtual void releaseSession(audio_io_handle_t output);
+#endif
         virtual status_t startOutput(audio_io_handle_t output, AudioSystem::stream_type stream, int session = 0);
         virtual status_t stopOutput(audio_io_handle_t output, AudioSystem::stream_type stream, int session = 0);
         virtual void setForceUse(AudioSystem::force_use usage, AudioSystem::forced_config config);

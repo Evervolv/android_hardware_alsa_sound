@@ -35,7 +35,7 @@
 
 #include "AudioHardwareALSA.h"
 
-namespace android
+namespace android_audio_legacy
 {
 
 AudioStreamInALSA::AudioStreamInALSA(AudioHardwareALSA *parent,
@@ -81,11 +81,11 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(mHandle->useCase));
-            } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
+            }/* else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(mHandle->useCase));
             } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, sizeof(mHandle->useCase));
-            } else {
+            } */else {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(mHandle->useCase));
             }
         } else {
@@ -94,19 +94,19 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 LOGE("Error reading: In call recording without voice call");
                 mParent->mLock.unlock();
                 return 0;
-            } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
+            } /*else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC, sizeof(mHandle->useCase));
 	    } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC, sizeof(mHandle->useCase));
-            } else {
+            } */else {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(mHandle->useCase));
             }
         }
         free(use_case);
         mHandle->module->route(mHandle, mDevices, mParent->mode());
-        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
-            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC) ||
-            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
+        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC)/* ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC)  ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)*/) {
             snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
@@ -213,4 +213,4 @@ status_t AudioStreamInALSA::setAcousticParams(void *params)
     return (status_t)NO_ERROR;
 }
 
-}       // namespace android
+}       // namespace android_audio_legacy
