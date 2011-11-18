@@ -602,9 +602,6 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     alsa_handle_t alsa_handle;
     unsigned long bufferSize = DEFAULT_IN_BUFFER_SIZE;
 
-    for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
-        bufferSize &= ~b;
-
     alsa_handle.module = mALSADevice;
     alsa_handle.bufferSize = bufferSize;
     alsa_handle.devices = devices;
@@ -709,14 +706,19 @@ status_t AudioHardwareALSA::dump(int fd, const Vector<String16>& args)
 
 size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
 {
+    size_t bufferSize;
     if (format != AudioSystem::PCM_16_BIT) {
         LOGW("getInputBufferSize bad format: %d", format);
         return 0;
     }
-    if(sampleRate < 44100) {
-        return DEFAULT_IN_BUFFER_SIZE * channelCount;
+    if(sampleRate == 16000) {
+        bufferSize = DEFAULT_IN_BUFFER_SIZE * 2 * channelCount;
+    } else if(sampleRate < 44100) {
+        bufferSize = DEFAULT_IN_BUFFER_SIZE * channelCount;
+    } else {
+        bufferSize = DEFAULT_IN_BUFFER_SIZE * 13;
     }
-    return DEFAULT_IN_BUFFER_SIZE * 8;
+    return bufferSize;
 }
 
 }       // namespace android_audio_legacy

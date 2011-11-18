@@ -239,7 +239,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     params->period_step = 1;
     params->avail_min = periodSize/2;
     params->start_threshold = periodSize/2 * numPeriods/2;
-    params->stop_threshold = bufferSize/2;
+    params->stop_threshold = INT_MAX;
     params->silence_threshold = 0;
     params->silence_size = 0;
 
