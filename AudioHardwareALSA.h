@@ -330,9 +330,8 @@ public:
      * the software mixer will emulate this capability.
      */
     virtual status_t    setMasterVolume(float volume);
-#ifdef FM_RADIO
     virtual status_t    setFmVolume(float volume);
-#endif
+
     /**
      * setMode is called when the audio mode changes. NORMAL mode is for
      * standard audio playback, RINGTONE when a ringtone is playing, and IN_CALL

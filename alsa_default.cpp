@@ -275,14 +275,14 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
                    (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
             devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
                       AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
-        } /*else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+        } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
                    (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
             devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADSET |
                       AudioSystem::DEVICE_IN_ANC_HEADSET);
         } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
             devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
-        } */else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         }
@@ -304,9 +304,8 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         }
         strlcpy(curRxUCMDevice, device, sizeof(curRxUCMDevice));
         free(device);
-        /*if (devices & AudioSystem::DEVICE_OUT_FM)
+        if (devices & AudioSystem::DEVICE_OUT_FM)
             s_set_fm_vol(fmVolume);
-         */
     }
     device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
     if (device != NULL) {
@@ -723,9 +722,9 @@ char *getUCMDevice(uint32_t devices, int input)
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
             ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)/* ||
+             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) ||
              (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-             (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)*/ )) {
+             (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
              if (mDevSettingsFlag & TTY_VCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HEADSET_RX);
              } else if (mDevSettingsFlag & TTY_FULL) {
@@ -736,34 +735,32 @@ char *getUCMDevice(uint32_t devices, int input)
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
             ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
-            // if (mDevSettingsFlag & ANC_FLAG) {
-            //     return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
-            //} else 
-            {
+            if (mDevSettingsFlag & ANC_FLAG) {
+                return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
+            } else {
                 return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
             }
-        //} else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-        //    ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-        //    (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
-        //    return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
-        //} else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-        //         (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
-        //    return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+            ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+            (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
+            return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+                 (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
+            return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
         } else if (devices & AudioSystem::DEVICE_OUT_EARPIECE) {
             return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
         } else if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
                    (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) {
-            //if (mDevSettingsFlag & ANC_FLAG) {
-            //    return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
-            //} else 
-		{
+            if (mDevSettingsFlag & ANC_FLAG) {
+                return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+            } else {
                 return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
             }
-        //} else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-        //           (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
-         //   return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
+            return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
         } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)) {
@@ -778,8 +775,8 @@ char *getUCMDevice(uint32_t devices, int input)
             return strdup(curRxUCMDevice);
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
-       // } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
-       //     return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
+        } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
+            return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
         } else if (devices & AudioSystem::DEVICE_OUT_DEFAULT) {
             return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
         } else {
@@ -788,9 +785,8 @@ char *getUCMDevice(uint32_t devices, int input)
     } else {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
-            ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) //||
-            // (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)
-            )) {
+            ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
+             (devices & AudioSystem::DEVICE_IN_ANC_HEADSET))) {
              if (mDevSettingsFlag & TTY_HCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HEADSET_TX);
              } else if (mDevSettingsFlag & TTY_FULL) {
@@ -806,10 +802,10 @@ char *getUCMDevice(uint32_t devices, int input)
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-                //if ((callMode == AudioSystem::MODE_IN_CALL) &&
-                //    (!strcmp(curRxUCMDevice, SND_USE_CASE_DEV_HDMI))) {
-                //    return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
-                //}
+                if ((callMode == AudioSystem::MODE_IN_CALL) &&
+                    (!strcmp(curRxUCMDevice, SND_USE_CASE_DEV_HDMI))) {
+                    return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
+                }
                 if (mDevSettingsFlag & DMIC_FLAG) {
                     if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                         return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
@@ -820,8 +816,8 @@ char *getUCMDevice(uint32_t devices, int input)
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }
             }
-        } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) /* ||
-                   (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)*/ ) {
+        } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
             return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
         } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
              if (btsco_samplerate == BTSCO_RATE_16KHZ)
@@ -842,11 +838,11 @@ char *getUCMDevice(uint32_t devices, int input)
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }
             }
-        //} else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
-        //           (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
-        //           (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
+        } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
+                   (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
+                   (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
             /* Nothing to be done, use current active device */
-        //    return strdup(curTxUCMDevice);
+            return strdup(curTxUCMDevice);
         } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
                    (devices & AudioSystem::DEVICE_IN_AMBIENT) ||
                    (devices & AudioSystem::DEVICE_IN_BACK_MIC) ||
