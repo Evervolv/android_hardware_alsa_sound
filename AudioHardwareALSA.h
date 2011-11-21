@@ -93,7 +93,7 @@ static uint32_t FLUENCE_MODE_BROADSIDE = 1;
 struct alsa_handle_t {
     alsa_device_t *     module;
     uint32_t            devices;
-    char                useCase[25];
+    char                useCase[MAX_STR_LEN];
     struct pcm *        handle;
     snd_pcm_format_t    format;
     uint32_t            channels;
@@ -428,6 +428,8 @@ protected:
     uint32_t            mDevSettingsFlag;
     uint32_t            mVoipStreamCount;
     bool                mVoipMicMute;
+    uint32_t            mIncallMode;
+
     bool                mMicMute;
     int mIsVoiceCallActive;
     int mIsFmActive;

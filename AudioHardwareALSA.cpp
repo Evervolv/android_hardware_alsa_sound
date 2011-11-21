@@ -708,6 +708,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     Mutex::Autolock autoLock(mLock);
     char *use_case;
     int newMode = mode();
+    uint32_t route_devices;
 
     status_t err = BAD_VALUE;
     AudioStreamInALSA *in = 0;
@@ -823,7 +824,16 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
-                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(alsa_handle.useCase));
+                LOGD("openInputStream: into incall recording, channels %d", *channels);
+                mIncallMode = *channels;
+                if ((*channels & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
+                    (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
+                    strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                            sizeof(alsa_handle.useCase));
+                } else if (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
+                    strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                            sizeof(alsa_handle.useCase));
+                }
             } else if((devices == AudioSystem::DEVICE_IN_FM_RX)) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
             } else if(devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
@@ -834,8 +844,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         } else {
             if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
-                LOGE("Error opening input stream: In-call recording without voice call");
-                return 0;
+                LOGD("openInputStream: incall recording, channels %d", *channels);
+                mIncallMode = *channels;
+                if ((*channels & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
+                    (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
+                    strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_DL_REC, sizeof(alsa_handle.useCase));
+                } else if (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
+                    strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DL_REC, sizeof(alsa_handle.useCase));
+                }
             } else if(devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC, sizeof(alsa_handle.useCase));
             } else if (devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
@@ -848,10 +864,18 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
-        mALSADevice->route(&(*it), devices, mode());
+        if (devices == AudioSystem::DEVICE_IN_VOICE_CALL){
+           /* Add current devices info to devices to do route */
+            route_devices = devices | mCurDevice;
+            mALSADevice->route(&(*it), route_devices, mode());
+        } else {
+            mALSADevice->route(&(*it), devices, mode());
+        }
         if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
            !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
+           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_DL_REC) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC)) {
             snd_use_case_set(mUcMgr, "_verb", it->useCase);
         } else {
             snd_use_case_set(mUcMgr, "_enamod", it->useCase);
@@ -860,7 +884,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             it->sampleRate = *sampleRate;
         }
         if(channels) {
-            it->channels = AudioSystem::popCount(*channels);
+            it->channels = AudioSystem::popCount((*channels) &
+                      (AudioSystem::CHANNEL_IN_STEREO |
+                       AudioSystem::CHANNEL_IN_MONO));
+            LOGD("channels %d", it->channels);
         }
         err = mALSADevice->open(&(*it));
         if (err) {

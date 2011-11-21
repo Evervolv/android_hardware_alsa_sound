@@ -1,7 +1,7 @@
 /* AudioStreamInALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -84,7 +84,15 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
-                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE, sizeof(mHandle->useCase));
+                LOGD("read:: mParent->mIncallMode=%d", mParent->mIncallMode);
+                if ((mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
+                    (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
+                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                            sizeof(mHandle->useCase));
+                } else if (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
+                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                            sizeof(mHandle->useCase));
+                }
             } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(mHandle->useCase));
             } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
@@ -97,9 +105,13 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         } else {
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AudioSystem::MODE_IN_CALL)) {
-                LOGE("Error reading: In call recording without voice call");
-                mParent->mLock.unlock();
-                return 0;
+                LOGD("read:: ---- mParent->mIncallMode=%d", mParent->mIncallMode);
+                if ((mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
+                    (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
+                    strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC, sizeof(mHandle->useCase));
+                } else if (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
+                    strlcpy(mHandle->useCase, SND_USE_CASE_VERB_DL_REC, sizeof(mHandle->useCase));
+                }
             } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC, sizeof(mHandle->useCase));
         } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
@@ -120,7 +132,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
-            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC)) {
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_DL_REC)) {
             snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
