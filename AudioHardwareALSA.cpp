@@ -716,7 +716,7 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
     } else if(sampleRate < 44100) {
         bufferSize = DEFAULT_IN_BUFFER_SIZE * channelCount;
     } else {
-        bufferSize = DEFAULT_IN_BUFFER_SIZE * 13;
+        bufferSize = DEFAULT_IN_BUFFER_SIZE * 12;
     }
     return bufferSize;
 }
