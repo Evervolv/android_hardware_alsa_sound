@@ -58,9 +58,12 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false)
 {
+    FILE *fp;
+    char cpuInfo[200];
     hw_module_t *module;
     int err = hw_get_module(ALSA_HARDWARE_MODULE_ID,
             (hw_module_t const**)&module);
+    int codec_rev = 2;
     LOGV("hw_get_module(ALSA_HARDWARE_MODULE_ID) returned err %d", err);
     if (err == 0) {
         hw_device_t* device;
@@ -73,7 +76,31 @@ AudioHardwareALSA::AudioHardwareALSA() :
             mDevSettingsFlag = 0;
             mDevSettingsFlag |= TTY_OFF;
             mBluetoothVGS = false;
-            snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
+
+
+            if((fp = fopen("/proc/cpuinfo","r")) == NULL) {
+                LOGE("Cannot open /proc/cpuinfo file to get CPU variant");
+            } else {
+                while((fgets(cpuInfo, sizeof(cpuInfo), fp) != NULL)) {
+                    if (strstr(cpuInfo, "CPU variant")) {
+                        LOGV("%s", cpuInfo);
+                        if (strstr(cpuInfo, "0x0")) {
+                            codec_rev = 1;
+                        }
+                        break;
+                    }
+                }
+                fclose(fp);
+            }
+
+            if (codec_rev == 1) {
+                    LOGV("Detected tabla 1.x sound card");
+                    snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
+            } else {
+                    LOGV("Detected tabla 2.x sound card");
+                    snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x");
+            }
+
             if (mUcMgr < 0) {
                 LOGE("Failed to open ucm instance: %d", errno);
             } else {
