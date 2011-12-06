@@ -26,7 +26,8 @@
 #include <math.h>
 
 #define LOG_TAG "AudioStreamOutALSA"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
+#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -84,8 +85,8 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
             volume = 1.0;
         }
         lpa_vol = lrint((volume * 100.0)+0.5);
-        LOGV("setLpaVolume(%f)\n", volume);
-        LOGV("Setting LPA volume to %d (available range is 0 to 100)\n", lpa_vol);
+        LOGD("setLpaVolume(%f)\n", volume);
+        LOGD("Setting LPA volume to %d (available range is 0 to 100)\n", lpa_vol);
         mHandle->module->setLpaVolume(lpa_vol);
 
         return status;
@@ -177,6 +178,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         }
         else if (n < 0) {
             // Recovery is part of pcm_write. TODO split is later.
+            LOGE("pcm_write returned n < 0");
             return static_cast<ssize_t>(n);
         }
         else {
@@ -216,6 +218,7 @@ status_t AudioStreamOutALSA::close()
          mParent->mVoipMicMute = 0;
      }
 
+    LOGD("close");
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -234,7 +237,7 @@ status_t AudioStreamOutALSA::standby()
          return NO_ERROR;
      }
 
-    LOGV("standby");
+    LOGD("standby");
 
     mHandle->module->standby(mHandle);
 

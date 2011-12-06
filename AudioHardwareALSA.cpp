@@ -26,7 +26,8 @@
 #include <math.h>
 
 #define LOG_TAG "AudioHardwareALSA"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
+#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -64,7 +65,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     int err = hw_get_module(ALSA_HARDWARE_MODULE_ID,
             (hw_module_t const**)&module);
     int codec_rev = 2;
-    LOGV("hw_get_module(ALSA_HARDWARE_MODULE_ID) returned err %d", err);
+    LOGD("hw_get_module(ALSA_HARDWARE_MODULE_ID) returned err %d", err);
     if (err == 0) {
         hw_device_t* device;
         err = module->methods->open(module, ALSA_HARDWARE_NAME, &device);
@@ -117,7 +118,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
 AudioHardwareALSA::~AudioHardwareALSA()
 {
     if (mUcMgr != NULL) {
-        LOGV("closing ucm instance: %u", (unsigned)mUcMgr);
+        LOGD("closing ucm instance: %u", (unsigned)mUcMgr);
         snd_use_case_mgr_close(mUcMgr);
     }
     if (mALSADevice) {
@@ -181,8 +182,8 @@ status_t  AudioHardwareALSA::setFmVolume(float value)
     else if (vol < 0)
         vol = 0;
 
-    LOGV("setFmVolume(%f)\n", value);
-    LOGV("Setting FM volume to %d (available range is 0 to 100)\n", vol);
+    LOGD("setFmVolume(%f)\n", value);
+    LOGD("Setting FM volume to %d (available range is 0 to 100)\n", vol);
 
     mALSADevice->setFmVolume(vol);
 
@@ -213,7 +214,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     status_t status = NO_ERROR;
     int device;
     int btRate;
-    LOGV("setParameters() %s", keyValuePairs.string());
+    LOGD("setParameters() %s", keyValuePairs.string());
 
     key = String8(TTY_MODE_KEY);
     if (param.get(key, value) == NO_ERROR) {
@@ -465,7 +466,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                                     status_t *status)
 {
     Mutex::Autolock autoLock(mLock);
-    LOGV("openOutputStream: devices 0x%x channels %d sampleRate %d",
+    LOGD("openOutputStream: devices 0x%x channels %d sampleRate %d",
          devices, *channels, *sampleRate);
 
     status_t err = BAD_VALUE;
@@ -579,7 +580,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       mDeviceList.push_back(alsa_handle);
       ALSAHandleList::iterator it = mDeviceList.end();
       it--;
-      LOGV("useCase %s", it->useCase);
+      LOGD("useCase %s", it->useCase);
       mALSADevice->route(&(*it), devices, mode());
       if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
           snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI);
@@ -612,7 +613,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
                                      int sessionId)
 {
     Mutex::Autolock autoLock(mLock);
-    LOGE("openOutputSession");
+    LOGD("openOutputSession");
     AudioStreamOutALSA *out = 0;
     status_t err = BAD_VALUE;
 
@@ -650,7 +651,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     mDeviceList.push_back(alsa_handle);
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
-    LOGV("useCase %s", it->useCase);
+    LOGD("useCase %s", it->useCase);
     mALSADevice->route(&(*it), devices, mode());
     if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
         snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
@@ -686,7 +687,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     AudioStreamInALSA *in = 0;
     ALSAHandleList::iterator it;
 
-    LOGV("openInputStream: devices 0x%x channels %d sampleRate %d", devices, *channels, *sampleRate);
+    LOGD("openInputStream: devices 0x%x channels %d sampleRate %d", devices, *channels, *sampleRate);
     if (devices & (devices - 1)) {
         if (status) *status = err;
         return in;

@@ -25,7 +25,8 @@
 #include <dlfcn.h>
 
 #define LOG_TAG "AudioStreamInALSA"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
+#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -155,6 +156,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         }
         else if (n < 0) {
             // Recovery is part of pcm_write. TODO split is later.
+            LOGD("pcm_read() returned n < 0");
             return static_cast<ssize_t>(n);
         }
         else {
@@ -195,6 +197,7 @@ status_t AudioStreamInALSA::close()
         mParent->mVoipMicMute = 0;
      }
 
+    LOGD("close");
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -212,7 +215,7 @@ status_t AudioStreamInALSA::standby()
          return NO_ERROR;
     }
 
-    LOGV("standby");
+    LOGD("standby");
 
     mHandle->module->standby(mHandle);
 

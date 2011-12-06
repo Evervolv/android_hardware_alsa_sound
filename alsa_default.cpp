@@ -17,7 +17,8 @@
  */
 
 #define LOG_TAG "ALSAModule"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
+#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <cutils/properties.h>
 #include <linux/ioctl.h>
@@ -122,7 +123,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     }
     strlcpy(curRxUCMDevice, "None", sizeof(curRxUCMDevice));
     strlcpy(curTxUCMDevice, "None", sizeof(curTxUCMDevice));
-    LOGV("ALSA module opened");
+    LOGD("ALSA module opened");
 
     return 0;
 }
@@ -156,7 +157,7 @@ int deviceName(alsa_handle_t *handle, unsigned flags, char **value)
     }
     strlcat(ident, handle->useCase, sizeof(ident));
     ret = snd_use_case_get(handle->ucMgr, ident, (const char **)value);
-    LOGV("Device value returned is %s", (*value));
+    LOGD("Device value returned is %s", (*value));
     return ret;
 }
 
@@ -176,7 +177,7 @@ status_t setHardwareParams(alsa_handle_t *handle)
         return NO_INIT;
     }
 
-    LOGV("setHWParams: bufferSize %d", handle->bufferSize);
+    LOGD("setHWParams: bufferSize %d", handle->bufferSize);
     reqBuffSize = handle->bufferSize;
 
     if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
@@ -272,7 +273,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
     char *device, ident[70];
-    LOGV("%s: device %d", __FUNCTION__, devices);
+    LOGD("%s: device %d", __FUNCTION__, devices);
 
     if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
         if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
@@ -343,14 +344,14 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         strlcpy(curTxUCMDevice, device, sizeof(curTxUCMDevice));
         free(device);
     }
-    LOGV("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
+    LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 }
 
 // ----------------------------------------------------------------------------
 
 static status_t s_init(alsa_device_t *module, ALSAHandleList &list)
 {
-    LOGV("s_init: Initializing devices for ALSA module");
+    LOGD("s_init: Initializing devices for ALSA module");
 
     list.clear();
 
@@ -365,13 +366,13 @@ static status_t s_open(alsa_handle_t *handle)
 
     /* No need to call s_close for LPA as pcm device open and close is handled by LPAPlayer in stagefright */
     if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
-        LOGV("s_open: Opening LPA playback");
+        LOGD("s_open: Opening LPA playback");
         return NO_ERROR;
     }
 
     s_close(handle);
 
-    LOGV("s_open: handle %p", handle);
+    LOGD("s_open: handle %p", handle);
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
@@ -513,7 +514,7 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
     unsigned flags = 0;
     int err = NO_ERROR;
 
-    LOGV("s_start_voice_call: handle %p", handle);
+    LOGD("s_start_voice_call: handle %p", handle);
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
 
@@ -608,7 +609,7 @@ static status_t s_start_fm(alsa_handle_t *handle)
     unsigned flags = 0;
     int err = NO_ERROR;
 
-    LOGV("s_start_fm: handle %p", handle);
+    LOGE("s_start_fm: handle %p", handle);
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
@@ -739,7 +740,7 @@ static status_t s_close(alsa_handle_t *handle)
      struct pcm *h = handle->rxHandle;
 
     handle->rxHandle = 0;
-    LOGV("s_close: handle %p h %p", handle, h);
+    LOGD("s_close: handle %p h %p", handle, h);
     if (h) {
         LOGV("s_close rxHandle\n");
         err = pcm_close(h);
@@ -778,7 +779,7 @@ static status_t s_standby(alsa_handle_t *handle)
     status_t err = NO_ERROR;  
     struct pcm *h = handle->rxHandle;
     handle->rxHandle = 0;
-    LOGE("s_close: handle %p h %p", handle, h);
+    LOGD("s_standby: handle %p h %p", handle, h);
     if (h) {
         LOGE("s_standby  rxHandle\n");
         err = pcm_close(h);
@@ -809,7 +810,7 @@ static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode)
 {
     status_t status = NO_ERROR;
 
-    LOGV("s_route: devices 0x%x in mode %d", devices, mode);
+    LOGD("s_route: devices 0x%x in mode %d", devices, mode);
     callMode = mode;
     switchDevice(handle, devices, mode);
     return status;
@@ -901,7 +902,7 @@ char *getUCMDevice(uint32_t devices, int input)
         } else if (devices & AudioSystem::DEVICE_OUT_DEFAULT) {
             return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
         } else {
-            LOGV("No valid output device: %u", devices);
+            LOGD("No valid output device: %u", devices);
         }
     } else {
         if (!(mDevSettingsFlag & TTY_OFF) &&
@@ -976,7 +977,7 @@ char *getUCMDevice(uint32_t devices, int input)
                 return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
             }
         } else {
-            LOGV("No valid input device: %u", devices);
+            LOGD("No valid input device: %u", devices);
         }
     }
     return NULL;
@@ -984,27 +985,27 @@ char *getUCMDevice(uint32_t devices, int input)
 
 void s_set_voice_volume(int vol)
 {
-    LOGV("s_set_voice_volume: volume %d", vol);
+    LOGD("s_set_voice_volume: volume %d", vol);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voice Rx Volume", vol, 0);
 }
 
 void s_set_voip_volume(int vol)
 {
-    LOGV("s_set_voip_volume: volume %d", vol);
+    LOGD("s_set_voip_volume: volume %d", vol);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voip Rx Volume", vol, 0);
 }
 void s_set_mic_mute(int state)
 {
-    LOGV("s_set_mic_mute: state %d", state);
+    LOGD("s_set_mic_mute: state %d", state);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voice Tx Mute", state, 0);
 }
 
 void s_set_voip_mic_mute(int state)
 {
-    LOGV("s_set_voip_mic_mute: state %d", state);
+    LOGD("s_set_voip_mic_mute: state %d", state);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voip Tx Mute", state, 0);
 }
@@ -1016,7 +1017,7 @@ void s_set_btsco_rate(int rate)
 
 void s_enable_wide_voice(bool flag)
 {
-    LOGV("s_enable_wide_voice: flag %d", flag);
+    LOGD("s_enable_wide_voice: flag %d", flag);
     ALSAControl control("/dev/snd/controlC0");
     if(flag == true) {
         control.set("Widevoice Enable", 1, 0);

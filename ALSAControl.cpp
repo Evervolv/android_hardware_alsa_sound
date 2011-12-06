@@ -25,7 +25,8 @@
 #include <dlfcn.h>
 
 #define LOG_TAG "ALSAControl"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
+#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -40,7 +41,7 @@ namespace android_audio_legacy
 
 ALSAControl::ALSAControl(const char *device)
 {
-    LOGV("ALSAControl: ctor device %s", device);
+    LOGD("ALSAControl: ctor device %s", device);
     mHandle = mixer_open(device);
     LOGV("ALSAControl: ctor mixer %p", mHandle);
 }
@@ -71,7 +72,7 @@ status_t ALSAControl::set(const char *name, unsigned int value, int index)
 {
     struct mixer_ctl *ctl;
     int ret = 0;
-    LOGV("set:: name %s value %d index %d", name, value, index);
+    LOGD("set:: name %s value %d index %d", name, value, index);
     if (!mHandle) {
         LOGE("Control not initialized");
         return NO_INIT;
@@ -91,7 +92,7 @@ status_t ALSAControl::set(const char *name, const char *value)
 {
     struct mixer_ctl *ctl;
     int ret = 0;
-    LOGV("set:: name %s value %s", name, value);
+    LOGD("set:: name %s value %s", name, value);
 
     if (!mHandle) {
         LOGE("Control not initialized");

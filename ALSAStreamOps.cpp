@@ -25,7 +25,8 @@
 #include <dlfcn.h>
 
 #define LOG_TAG "ALSAStreamOps"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
+#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -176,7 +177,7 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     int device;
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
-        LOGV("setParameters(): keyRouting with device %d", device);
+        LOGD("setParameters(): keyRouting with device %d", device);
         mDevices = device;
         if(device) {
             mParent->doRouting(device);
@@ -274,7 +275,7 @@ uint32_t ALSAStreamOps::channels() const
 
 void ALSAStreamOps::close()
 {
-    LOGV("close");
+    LOGD("close");
     mParent->mVoipMicMute = false;
     mParent->mVoipStreamCount = 0;
     mParent->mALSADevice->close(mHandle);
@@ -292,7 +293,7 @@ void ALSAStreamOps::close()
 //
 status_t ALSAStreamOps::open(int mode)
 {
-    LOGV("open");
+    LOGD("open");
     return mParent->mALSADevice->open(mHandle);
 }
 
