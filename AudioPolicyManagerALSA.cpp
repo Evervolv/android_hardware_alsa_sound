@@ -349,9 +349,18 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
         }
 #endif
         AudioPolicyManagerBase::updateDeviceForStrategy();
+
+        int delayMs = 0;
+        if (AudioSystem::DEVICE_OUT_SPEAKER == newDevice
+            && AudioSystem::DEVICE_OUT_WIRED_HEADSET == device) {
+            //Add some delay(192ms) while switching from wired headset to speaker before pause
+            //music keeps playing from speaker if there's not delay or delay is too small.
+            delayMs = mOutputs.valueFor(mHardwareOutput)->mLatency*8;
+        }
+
         if(mLPADecodeOutput != -1)
-            setOutputDevice(mLPADecodeOutput, newDevice);
-        setOutputDevice(mHardwareOutput, newDevice);
+            setOutputDevice(mLPADecodeOutput, newDevice, false, delayMs);
+        setOutputDevice(mHardwareOutput, newDevice, false, delayMs);
 
         if (device == AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
             device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
