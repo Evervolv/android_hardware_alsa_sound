@@ -237,7 +237,6 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 
     unsigned long bufferSize = pcm->buffer_size;
     unsigned long periodSize = pcm->period_size;
-    int numPeriods;
 
     params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
     if (!params) {
@@ -246,7 +245,6 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     }
 
     // Get the current software parameters
-    numPeriods = bufferSize/periodSize;
     params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;
     if(((!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
@@ -257,7 +255,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
           params->stop_threshold = INT_MAX;
      } else {
          params->avail_min = periodSize/2;
-         params->start_threshold = periodSize/2 * numPeriods/2;
+         params->start_threshold = handle->channels - 1 ? periodSize/2 : periodSize/4;
          params->stop_threshold = INT_MAX;
      }
     params->silence_threshold = 0;
