@@ -918,6 +918,8 @@ char *getUCMDevice(uint32_t devices, int input)
                     } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
                         return strdup(SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
                     }
+                } else if (mDevSettingsFlag & QMIC_FLAG){
+                    return strdup(SND_USE_CASE_DEV_QUAD_MIC);
                 } else {
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }
@@ -942,6 +944,8 @@ char *getUCMDevice(uint32_t devices, int input)
                     } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
                         return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
                     }
+                } else if (mDevSettingsFlag & QMIC_FLAG){
+                    return strdup(SND_USE_CASE_DEV_QUAD_MIC);
                 } else {
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }

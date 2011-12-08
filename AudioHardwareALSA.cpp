@@ -236,14 +236,20 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         doRouting(0);
     }
 
-    key = String8(DUALMIC_KEY);
+    key = String8(FLUENCE_KEY);
     if (param.get(key, value) == NO_ERROR) {
-        if (value == "true") {
-            mDevSettingsFlag |= DMIC_FLAG;
-            LOGI("DualMic feature Enabled");
-        } else {
+        if (value == "quadmic") {
+            mDevSettingsFlag |= QMIC_FLAG;
             mDevSettingsFlag &= (~DMIC_FLAG);
-            LOGI("DualMic feature Disabled");
+            LOGV("Fluence quadMic feature Enabled");
+        } else if (value == "dualmic") {
+            mDevSettingsFlag |= DMIC_FLAG;
+            mDevSettingsFlag &= (~QMIC_FLAG);
+            LOGV("Fluence dualmic feature Enabled");
+        } else if (value == "none") {
+            mDevSettingsFlag &= (~DMIC_FLAG);
+            mDevSettingsFlag &= (~QMIC_FLAG);
+            LOGV("Fluence feature Disabled");
         }
         mALSADevice->setFlags(mDevSettingsFlag);
         doRouting(0);
@@ -311,7 +317,21 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 
     String8 key = String8(DUALMIC_KEY);
     if (param.get(key, value) == NO_ERROR) {
-        value = String8((mDevSettingsFlag & DMIC_FLAG) ? "true" : "false");
+        value = String8("false");
+        param.add(key, value);
+    }
+
+    key = String8(FLUENCE_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+	if ((mDevSettingsFlag & QMIC_FLAG) &&
+                               (mDevSettingsFlag & ~DMIC_FLAG))
+            value = String8("quadmic");
+	else if ((mDevSettingsFlag & DMIC_FLAG) &&
+                                (mDevSettingsFlag & ~QMIC_FLAG))
+            value = String8("dualmic");
+	else if ((mDevSettingsFlag & ~DMIC_FLAG) &&
+                                (mDevSettingsFlag & ~QMIC_FLAG))
+            value = String8("none");
         param.add(key, value);
     }
 

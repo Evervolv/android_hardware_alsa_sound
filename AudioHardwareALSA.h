@@ -69,6 +69,7 @@ class AudioHardwareALSA;
 #define VOIP_RECORD_LATENCY        6400
 
 #define DUALMIC_KEY         "dualmic_enabled"
+#define FLUENCE_KEY         "fluence"
 #define ANC_KEY             "anc_enabled"
 #define TTY_MODE_KEY        "tty_mode"
 #define BT_SAMPLERATE_KEY   "bt_samplerate"
@@ -77,6 +78,7 @@ class AudioHardwareALSA;
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
+#define QMIC_FLAG       0x00000004
 #define TTY_OFF         0x00000010
 #define TTY_FULL        0x00000020
 #define TTY_VCO         0x00000040
