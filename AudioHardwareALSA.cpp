@@ -617,12 +617,6 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     AudioStreamOutALSA *out = 0;
     status_t err = BAD_VALUE;
 
-    if (devices & (devices - 1)) {
-        if (status) *status = err;
-        LOGE("openOutputSession called with bad devices");
-        return out;
-    }
-
     alsa_handle_t alsa_handle;
     unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
 
