@@ -272,8 +272,9 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 
 void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
-    char *device, ident[70];
-    LOGD("%s: device %d", __FUNCTION__, devices);
+    bool inCallDevSwitch = false;
+    char *rxDevice, *txDevice, ident[70];
+    LOGV("%s: device %d", __FUNCTION__, devices);
 
     if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
         if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
@@ -308,41 +309,46 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         }
     }
 
-    device = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
-    if (device != NULL) {
-        if (strcmp(curRxUCMDevice, "None") && ((mode != AudioSystem::MODE_IN_CALL) || (mode != AudioSystem::MODE_IN_COMMUNICATION)) ) {
-            if ((!strcmp(device, curRxUCMDevice))) {
+    rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
+    txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
+    if ((rxDevice != NULL) && (txDevice != NULL)) {
+        if (((strcmp(rxDevice, curRxUCMDevice)) || (strcmp(txDevice, curTxUCMDevice))) &&
+            (mode == AudioSystem::MODE_IN_CALL))
+            inCallDevSwitch = true;
+    }
+    if (rxDevice != NULL) {
+        if (strcmp(curRxUCMDevice, "None")) {
+            if ((!strcmp(rxDevice, curRxUCMDevice)) && (inCallDevSwitch != true)){
                 LOGV("Required device is already set, ignoring device enable");
-                snd_use_case_set(handle->ucMgr, "_enadev", device);
+                snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
             } else {
                 strlcpy(ident, "_swdev/", sizeof(ident));
                 strlcat(ident, curRxUCMDevice, sizeof(ident));
-                snd_use_case_set(handle->ucMgr, ident, device);
+                snd_use_case_set(handle->ucMgr, ident, rxDevice);
             }
         } else {
-            snd_use_case_set(handle->ucMgr, "_enadev", device);
+            snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
         }
-        strlcpy(curRxUCMDevice, device, sizeof(curRxUCMDevice));
-        free(device);
+        strlcpy(curRxUCMDevice, rxDevice, sizeof(curRxUCMDevice));
+        free(rxDevice);
         if (devices & AudioSystem::DEVICE_OUT_FM)
             s_set_fm_vol(fmVolume);
     }
-    device = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
-    if (device != NULL) {
-        if (strcmp(curTxUCMDevice, "None") && ((mode != AudioSystem::MODE_IN_CALL) || (mode != AudioSystem::MODE_IN_COMMUNICATION)) ) {
-            if ((!strcmp(device, curTxUCMDevice))) {
+    if (txDevice != NULL) {
+       if (strcmp(curTxUCMDevice, "None")) {
+           if ((!strcmp(txDevice, curTxUCMDevice)) && (inCallDevSwitch != true)){
                 LOGV("Required device is already set, ignoring device enable");
-                snd_use_case_set(handle->ucMgr, "_enadev", device);
+                snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
             } else {
                 strlcpy(ident, "_swdev/", sizeof(ident));
                 strlcat(ident, curTxUCMDevice, sizeof(ident));
-                snd_use_case_set(handle->ucMgr, ident, device);
+                snd_use_case_set(handle->ucMgr, ident, txDevice);
             }
         } else {
-            snd_use_case_set(handle->ucMgr, "_enadev", device);
+            snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
         }
-        strlcpy(curTxUCMDevice, device, sizeof(curTxUCMDevice));
-        free(device);
+        strlcpy(curTxUCMDevice, txDevice, sizeof(curTxUCMDevice));
+        free(txDevice);
     }
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 }
