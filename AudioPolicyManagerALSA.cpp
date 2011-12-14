@@ -805,6 +805,18 @@ void AudioPolicyManager::setOutputDevice(audio_io_handle_t output, uint32_t devi
          }
     }
 #endif
+    // wait for output buffers to be played on the HDMI device before routing to new device
+    if(prevDevice == AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        if((mLPADecodeOutput != -1 && output == mLPADecodeOutput &&
+            mOutputs.valueFor(mLPADecodeOutput)->isUsedByStrategy(STRATEGY_MEDIA))) {
+            checkAndSetVolume(AudioSystem::MUSIC, mStreams[AudioSystem::MUSIC].mIndexCur, mLPADecodeOutput, device, delayMs, force);
+            usleep(75*1000);
+        } else {
+            checkAndSetVolume(AudioSystem::MUSIC, mStreams[AudioSystem::MUSIC].mIndexCur, output, device, delayMs, force);
+            usleep(outputDesc->mLatency*3*1000);
+        }
+    }
+
     // do the routing
     AudioParameter param = AudioParameter();
     param.addInt(String8(AudioParameter::keyRouting), (int)device);
