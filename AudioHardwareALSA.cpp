@@ -1,7 +1,7 @@
 /* AudioHardwareALSA.cpp
  **
  ** Copyright 2008-2010 Wind River Systems
- ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -300,6 +300,18 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         if(mALSADevice) {
             mALSADevice->enableWideVoice(flag);
+        }
+        param.remove(key);
+    }
+
+    key = String8(FENS_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+        bool flag = false;
+        if (value == "true") {
+            flag = true;
+        }
+        if(mALSADevice) {
+            mALSADevice->enableFENS(flag);
         }
         param.remove(key);
     }

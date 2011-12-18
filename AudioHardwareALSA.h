@@ -1,7 +1,7 @@
 /* AudioHardwareALSA.h
  **
  ** Copyright 2008-2010, Wind River Systems
- ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -75,6 +75,7 @@ class AudioHardwareALSA;
 #define BT_SAMPLERATE_KEY   "bt_samplerate"
 #define BTHEADSET_VGS       "bt_headset_vgs"
 #define WIDEVOICE_KEY "wide_voice_enable"
+#define FENS_KEY "fens_enable"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -125,6 +126,7 @@ struct alsa_device_t {
     void     (*setBtscoRate)(int);
     status_t (*setLpaVolume)(int);
     void     (*enableWideVoice)(bool);
+    void     (*enableFENS)(bool);
     void     (*setFlags)(uint32_t);
 };
 

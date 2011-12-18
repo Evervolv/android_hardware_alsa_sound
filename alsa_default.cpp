@@ -1,7 +1,7 @@
 /* alsa_default.cpp
  **
  ** Copyright 2009 Wind River Systems
- ** Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@ static status_t s_set_fm_vol(int);
 static void     s_set_btsco_rate(int);
 static status_t s_set_lpa_vol(int);
 static void     s_enable_wide_voice(bool flag);
+static void     s_enable_fens(bool flag);
 static void     s_set_flags(uint32_t flags);
 
 static char mic_type[25];
@@ -109,6 +110,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setBtscoRate = s_set_btsco_rate;
     dev->setLpaVolume = s_set_lpa_vol;
     dev->enableWideVoice = s_enable_wide_voice;
+    dev->enableFENS = s_enable_fens;
     dev->setFlags = s_set_flags;
 
     *device = &dev->common;
@@ -1013,6 +1015,17 @@ void s_enable_wide_voice(bool flag)
         control.set("Widevoice Enable", 1, 0);
     } else {
         control.set("Widevoice Enable", 0, 0);
+    }
+}
+
+void s_enable_fens(bool flag)
+{
+    LOGD("s_enable_fens: flag %d", flag);
+    ALSAControl control("/dev/snd/controlC0");
+    if(flag == true) {
+        control.set("FENS Enable", 1, 0);
+    } else {
+        control.set("FENS Enable", 0, 0);
     }
 }
 
