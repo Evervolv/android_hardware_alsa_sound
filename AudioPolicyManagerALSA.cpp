@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
- * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,6 +61,8 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
             // FALL THROUGH
 
         default:    // FORCE_NONE
+            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY;
+            if (device) break;
 #ifdef WITH_A2DP
             // when not in a phone call, phone strategy should route STREAM_VOICE_CALL to A2DP
             if (!isInCall()) {
@@ -142,7 +144,11 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
         //FM stream to speaker.
         switch (mForceUse[AudioSystem::FOR_MEDIA]) {
         default:{
-            uint32_t device2 = 0;
+            uint32_t device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY;
+            if(device2 != 0) {
+                // No combo device allowed with proxy device
+                device = 0;
+            }
     #ifdef WITH_A2DP
             if (mA2dpOutput != 0) {
                 if (strategy == STRATEGY_SONIFICATION && !a2dpUsedForSonification()) {
