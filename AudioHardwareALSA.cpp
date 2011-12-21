@@ -175,7 +175,7 @@ status_t  AudioHardwareALSA::setFmVolume(float value)
 {
     status_t status = NO_ERROR;
 
-    int vol = android::AudioSystem::logToLinear( value );
+    int vol = android::AudioSystem::logToLinear( (value?(value+0.005):value) );
 
     if (vol > 100)
         vol = 100;
