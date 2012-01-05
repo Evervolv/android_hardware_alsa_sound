@@ -287,7 +287,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
+                      AudioSystem::DEVICE_IN_AUX_DIGITAL);
         }
     }
 
@@ -912,10 +912,6 @@ char *getUCMDevice(uint32_t devices, int input)
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-                if ((callMode == AudioSystem::MODE_IN_CALL) &&
-                    (!strcmp(curRxUCMDevice, SND_USE_CASE_DEV_HDMI))) {
-                    return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
-                }
                 if (mDevSettingsFlag & DMIC_FLAG) {
                     if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                         return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
@@ -926,6 +922,8 @@ char *getUCMDevice(uint32_t devices, int input)
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }
             }
+        } else if (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL) {
+            return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
         } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
                    (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
             return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
