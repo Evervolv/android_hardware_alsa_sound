@@ -164,10 +164,9 @@ int deviceName(alsa_handle_t *handle, unsigned flags, char **value)
 status_t setHardwareParams(alsa_handle_t *handle)
 {
     struct snd_pcm_hw_params *params;
-    unsigned long periodSize, bufferSize, reqBuffSize;
+    unsigned long bufferSize, reqBuffSize;
     unsigned int periodTime, bufferTime;
     unsigned int requestedRate = handle->sampleRate;
-    int numPeriods = 8;
     int status = 0;
 
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
@@ -177,26 +176,9 @@ status_t setHardwareParams(alsa_handle_t *handle)
         return NO_INIT;
     }
 
-    LOGD("setHWParams: bufferSize %d", handle->bufferSize);
     reqBuffSize = handle->bufferSize;
-
-    if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
-        numPeriods = 2;
-    }
-    if((!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
-        (!strcmp(handle->useCase,SND_USE_CASE_VERB_IP_VOICECALL))) {
-        numPeriods = 10;
-    }
-    if ((!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO))) {
-        numPeriods = 4;
-    }
-
-    periodSize = reqBuffSize;
-    bufferSize = reqBuffSize * numPeriods;
-    LOGV("setHardwareParams: bufferSize %d periodSize %d channels %d sampleRate %d",
-         bufferSize, periodSize, handle->channels, handle->sampleRate);
+    LOGD("setHardwareParams: reqBuffSize %d channels %d sampleRate %d",
+         (int) reqBuffSize, handle->channels, handle->sampleRate);
 
     param_init(params);
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
@@ -205,27 +187,30 @@ status_t setHardwareParams(alsa_handle_t *handle)
                    SNDRV_PCM_FORMAT_S16_LE);
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
-    param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, periodSize);
+    param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
                    handle->channels - 1 ? 32 : 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
                   handle->channels);
-    param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, numPeriods);
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
     param_set_hw_refine(handle->handle, params);
-
-    handle->handle->rate = handle->sampleRate;
-    handle->handle->channels = handle->channels;
-    handle->handle->period_size = periodSize;
-    handle->handle->buffer_size = bufferSize;
-    handle->periodSize = periodSize;
 
     if (param_set_hw_params(handle->handle, params)) {
         LOGE("cannot set hw params");
         return NO_INIT;
     }
     param_dump(params);
+
+    handle->handle->buffer_size = pcm_buffer_size(params);
+    handle->handle->period_size = pcm_period_size(params);
+    handle->handle->period_cnt = handle->handle->buffer_size/handle->handle->period_size;
+    LOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d",
+        handle->handle->buffer_size, handle->handle->period_size,
+        handle->handle->period_cnt);
+    handle->handle->rate = handle->sampleRate;
+    handle->handle->channels = handle->channels;
+    handle->periodSize = handle->handle->period_size;
     handle->bufferSize = handle->handle->period_size;
     return NO_ERROR;
 }
@@ -235,7 +220,6 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     struct snd_pcm_sw_params* params;
     struct pcm* pcm = handle->handle;
 
-    unsigned long bufferSize = pcm->buffer_size;
     unsigned long periodSize = pcm->period_size;
 
     params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
@@ -249,7 +233,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     params->period_step = 1;
     if(((!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
         (!strcmp(handle->useCase,SND_USE_CASE_VERB_IP_VOICECALL)))){
-          LOGV("setparam:  start\stop threshold for Voip ");
+          LOGV("setparam:  start & stop threshold for Voip ");
           params->avail_min = handle->channels - 1 ? periodSize/4 : periodSize/2;
           params->start_threshold = periodSize/2;
           params->stop_threshold = INT_MAX;
