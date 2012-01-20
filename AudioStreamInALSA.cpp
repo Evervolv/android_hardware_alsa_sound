@@ -164,12 +164,14 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         n = pcm_read(mHandle->handle, buffer,
             period_size);
         LOGV("pcm_read() returned n = %d", n);
-        if (n && n != -EAGAIN) {
-            //Recovery part of pcm_read. TODO:split recovery.
-            return static_cast<ssize_t>(n);
+        if (n && (n == -EIO || n == -EAGAIN || n == -EPIPE || n == -EBADFD)) {
+            LOGW("pcm_read() returned error n %d, Recovering from error\n", n);
+            pcm_close(mHandle->handle);
+            mHandle->handle = NULL;
+            mHandle->module->open(mHandle);
+            continue;
         }
         else if (n < 0) {
-            // Recovery is part of pcm_write. TODO split is later.
             LOGD("pcm_read() returned n < 0");
             return static_cast<ssize_t>(n);
         }
