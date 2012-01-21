@@ -171,15 +171,12 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                      (char *)buffer + sent,
                       period_size);
         }
-        if (n == -EBADFD) {
-            // Somehow the stream is in a bad state. The driver probably
-            // has a bug and snd_pcm_recover() doesn't seem to handle this.
+        if (n < 0) {
+            LOGE("pcm_write returned error %d, trying to recover\n", n);
+            pcm_close(mHandle->handle);
+            mHandle->handle = NULL;
             mHandle->module->open(mHandle);
-        }
-        else if (n < 0) {
-            // Recovery is part of pcm_write. TODO split is later.
-            LOGE("pcm_write returned n < 0");
-            return static_cast<ssize_t>(n);
+            continue;
         }
         else {
             mFrameCount += n;
