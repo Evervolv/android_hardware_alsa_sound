@@ -282,12 +282,6 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                     LOGV("setDeviceConnectionState() BT SCO  device, address %s", device_address);
                     // keep track of SCO device address
                     mScoDeviceAddress = String8(device_address, MAX_DEVICE_ADDRESS_LEN);
-#ifdef WITH_A2DP
-                    if (mA2dpOutput != 0 &&
-                        mPhoneState != AudioSystem::MODE_NORMAL) {
-                        mpClientInterface->suspendOutput(mA2dpOutput);
-                    }
-#endif
                 }
             }
             break;
@@ -316,12 +310,6 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             {
                 if (AudioSystem::isBluetoothScoDevice(device)) {
                     mScoDeviceAddress = "";
-#ifdef WITH_A2DP
-                    if (mA2dpOutput != 0 &&
-                        mPhoneState != AudioSystem::MODE_NORMAL) {
-                        mpClientInterface->restoreOutput(mA2dpOutput);
-                    }
-#endif
                 }
             }
             } break;
@@ -355,6 +343,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             }
         }
 #ifdef WITH_A2DP
+        AudioPolicyManagerBase::checkA2dpSuspend();
         AudioPolicyManagerBase::checkOutputForAllStrategies();
         // A2DP outputs must be closed after checkOutputForAllStrategies() is executed
         if (state == AudioSystem::DEVICE_STATE_UNAVAILABLE && AudioSystem::isA2dpDevice(device)) {
@@ -494,15 +483,8 @@ void AudioPolicyManager::setPhoneState(int state)
     }
 
 #ifdef WITH_A2DP
+    AudioPolicyManagerBase::checkA2dpSuspend();
     AudioPolicyManagerBase::checkOutputForAllStrategies();
-    // suspend A2DP output if a SCO device is present.
-    if (mA2dpOutput != 0 && mScoDeviceAddress != "") {
-        if (oldState == AudioSystem::MODE_NORMAL) {
-            mpClientInterface->suspendOutput(mA2dpOutput);
-        } else if (state == AudioSystem::MODE_NORMAL) {
-            mpClientInterface->restoreOutput(mA2dpOutput);
-        }
-    }
 #endif
     AudioPolicyManagerBase::updateDeviceForStrategy();
 
@@ -825,14 +807,7 @@ void AudioPolicyManager::setOutputDevice(audio_io_handle_t output, uint32_t devi
         // wait for the PCM output buffers to empty before proceeding with the rest of the command
         usleep(outputDesc->mLatency*2*1000);
     }
-#ifdef WITH_A2DP
-    // suspend A2DP output if SCO device is selected
-    if (AudioSystem::isBluetoothScoDevice((AudioSystem::audio_devices)device)) {
-         if (mA2dpOutput != 0) {
-             mpClientInterface->suspendOutput(mA2dpOutput);
-         }
-    }
-#endif
+
     // wait for output buffers to be played on the HDMI device before routing to new device
     if(prevDevice == AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         if((mLPADecodeOutput != -1 && output == mLPADecodeOutput &&
@@ -856,15 +831,6 @@ void AudioPolicyManager::setOutputDevice(audio_io_handle_t output, uint32_t devi
         AudioPolicyManagerBase::applyStreamVolumes(mLPADecodeOutput, device, delayMs);
     }
 
-#ifdef WITH_A2DP
-    // if disconnecting SCO device, restore A2DP output
-    if (AudioSystem::isBluetoothScoDevice((AudioSystem::audio_devices)prevDevice)) {
-         if (mA2dpOutput != 0) {
-             LOGV("restore A2DP output");
-             mpClientInterface->restoreOutput(mA2dpOutput);
-         }
-    }
-#endif
     // if changing from a combined headset + speaker route, unmute media streams
     if (prevDevice == (AudioSystem::DEVICE_OUT_SPEAKER | AudioSystem::DEVICE_OUT_WIRED_HEADSET)
         || prevDevice == (AudioSystem::DEVICE_OUT_SPEAKER | AudioSystem::DEVICE_OUT_ANC_HEADSET)
@@ -1045,6 +1011,7 @@ void AudioPolicyManager::setForceUse(AudioSystem::force_use usage, AudioSystem::
     // check for device and output changes triggered by new phone state
     uint32_t newDevice = getNewDevice(mHardwareOutput, false);
 #ifdef WITH_A2DP
+    AudioPolicyManagerBase::checkA2dpSuspend();
     checkOutputForAllStrategies();
 #endif
     updateDeviceForStrategy();
