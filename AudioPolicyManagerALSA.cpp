@@ -589,7 +589,7 @@ void AudioPolicyManager::pauseSession(audio_io_handle_t output, AudioSystem::str
 
     if ( (output == mLPADecodeOutput) &&
          (stream == mLPAStreamType) ) {
-
+        AudioPolicyManager::stopOutput(output, mLPAStreamType);
         mLPAActiveOuput = mLPADecodeOutput;
         mLPAActiveStreamType = mLPAStreamType;
         mLPADecodeOutput = -1;
