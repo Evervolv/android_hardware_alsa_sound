@@ -313,7 +313,14 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
-
+    key = String8(AudioParameter::keyHandleFm);
+    if (param.getInt(key, device) == NO_ERROR) {
+        // Ignore if device is 0
+        if(device) {
+            handleFm(device);
+        }
+        param.remove(key);
+    }
     if (param.size()) {
         status = BAD_VALUE;
     }
@@ -429,58 +436,8 @@ void AudioHardwareALSA::doRouting(int device)
             }
         }
         mIsVoiceCallActive = 0;
-    } else if(device & AudioSystem::DEVICE_OUT_FM && mIsFmActive == 0) {
-        // Start FM Radio on current active device
-        unsigned long bufferSize = FM_BUFFER_SIZE;
-        alsa_handle_t alsa_handle;
-        char *use_case;
-        LOGV("Start FM");
-        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DIGITAL_RADIO, sizeof(alsa_handle.useCase));
-        } else {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_FM, sizeof(alsa_handle.useCase));
-        }
-        free(use_case);
-
-        for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
-        bufferSize &= ~b;
-        alsa_handle.module = mALSADevice;
-        alsa_handle.bufferSize = bufferSize;
-        alsa_handle.devices = device;
-        alsa_handle.handle = 0;
-        alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
-        alsa_handle.channels = DEFAULT_CHANNEL_MODE;
-        alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
-        alsa_handle.latency = VOICE_LATENCY;
-        alsa_handle.rxHandle = 0;
-        alsa_handle.ucMgr = mUcMgr;
-        mIsFmActive = 1;
-        mDeviceList.push_back(alsa_handle);
-        ALSAHandleList::iterator it = mDeviceList.end();
-        it--;
-        mALSADevice->route(&(*it), (uint32_t)device, newMode);
-        if(!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) {
-            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
-        } else {
-            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_FM);
-        }
-        mALSADevice->startFm(&(*it));
-    } else if(!(device & AudioSystem::DEVICE_OUT_FM) && mIsFmActive == 1) {
-        // Stop FM Radio
-        LOGV("Stop FM");
-        for(ALSAHandleList::iterator it = mDeviceList.begin();
-            it != mDeviceList.end(); ++it) {
-            if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
-              (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
-                mALSADevice->close(&(*it));
-                mALSADevice->route(&(*it), (uint32_t)device, newMode);
-                mDeviceList.erase(it);
-                break;
-            }
-        }
-        mIsFmActive = 0;
-    } else {
+     }
+     else {
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         mALSADevice->route(&(*it), (uint32_t)device, newMode);
@@ -975,4 +932,60 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
     return bufferSize;
 }
 
+void AudioHardwareALSA::handleFm(int device)
+{
+int newMode = mode();
+    if(device & AudioSystem::DEVICE_OUT_FM && mIsFmActive == 0) {
+        // Start FM Radio on current active device
+        unsigned long bufferSize = FM_BUFFER_SIZE;
+        alsa_handle_t alsa_handle;
+        char *use_case;
+        LOGV("Start FM");
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DIGITAL_RADIO, sizeof(alsa_handle.useCase));
+        } else {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_FM, sizeof(alsa_handle.useCase));
+        }
+        free(use_case);
+
+        for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
+        bufferSize &= ~b;
+        alsa_handle.module = mALSADevice;
+        alsa_handle.bufferSize = bufferSize;
+        alsa_handle.devices = device;
+        alsa_handle.handle = 0;
+        alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+        alsa_handle.channels = DEFAULT_CHANNEL_MODE;
+        alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
+        alsa_handle.latency = VOICE_LATENCY;
+        alsa_handle.rxHandle = 0;
+        alsa_handle.ucMgr = mUcMgr;
+        mIsFmActive = 1;
+        mDeviceList.push_back(alsa_handle);
+        ALSAHandleList::iterator it = mDeviceList.end();
+        it--;
+        mALSADevice->route(&(*it), (uint32_t)device, newMode);
+        if(!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) {
+            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
+        } else {
+            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_FM);
+        }
+        mALSADevice->startFm(&(*it));
+    } else if (!(device & AudioSystem::DEVICE_OUT_FM) && mIsFmActive == 1) {
+        //i Stop FM Radio
+        LOGV("Stop FM");
+        for(ALSAHandleList::iterator it = mDeviceList.begin();
+            it != mDeviceList.end(); ++it) {
+            if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+              (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
+                mALSADevice->close(&(*it));
+                //mALSADevice->route(&(*it), (uint32_t)device, newMode);
+                mDeviceList.erase(it);
+                break;
+            }
+        }
+        mIsFmActive = 0;
+    }
+}
 }       // namespace android_audio_legacy

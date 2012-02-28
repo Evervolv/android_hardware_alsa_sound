@@ -184,6 +184,17 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
+    else {
+        key = String8(AudioParameter::keyHandleFm);
+        if (param.getInt(key, device) == NO_ERROR) {
+        LOGD("setParameters(): handleFm with device %d", device);
+        mDevices = device;
+            if(device) {
+                mParent->handleFm(device);
+            }
+            param.remove(key);
+        }
+    }
 
     return NO_ERROR;
 }

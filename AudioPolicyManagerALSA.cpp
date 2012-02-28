@@ -335,6 +335,9 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             if(newDevice == 0){
                 newDevice = getDeviceForStrategy(STRATEGY_MEDIA, false);
             }
+            AudioParameter param = AudioParameter();
+            param.addInt(String8(AudioParameter::keyHandleFm), (int)newDevice);
+            mpClientInterface->setParameters(mHardwareOutput, param.toString());
         }
         if(device == AudioSystem::DEVICE_OUT_ANC_HEADPHONE ||
            device == AudioSystem::DEVICE_OUT_ANC_HEADSET) {

@@ -411,7 +411,7 @@ public:
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     void                doRouting(int device);
-
+    void                handleFm(int device);
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
     friend class ALSAStreamOps;
