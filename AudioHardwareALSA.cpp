@@ -801,10 +801,23 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
               ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_FM, MAX_UC_LEN))
               ||(0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_FM_REC, MAX_UC_LEN)))
             {
-                LOGD("Input stream already exists, new stream not permitted: useCase:%s, devices:0x%x, module:%p", itDev->useCase, itDev->devices, itDev->module);
-                return in;
+                if(!(devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)){
+                    LOGD("Input stream already exists, new stream not permitted: useCase:%s, devices:0x%x, module:%p",
+                        itDev->useCase, itDev->devices, itDev->module);
+                    return in;
+                }
             }
+        else if ((0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_FM_A2DP_REC, MAX_UC_LEN))
+                ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, MAX_UC_LEN)))
+             {
+                 if((devices == AudioSystem::DEVICE_IN_FM_RX_A2DP)){
+                     LOGD("Input stream already exists, new stream not permitted: useCase:%s, devices:0x%x, module:%p",
+                         itDev->useCase, itDev->devices, itDev->module);
+                     return in;
+                 }
+             }
         }
+
         alsa_handle_t alsa_handle;
         unsigned long bufferSize = DEFAULT_IN_BUFFER_SIZE;
 
