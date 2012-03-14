@@ -276,8 +276,11 @@ uint32_t ALSAStreamOps::channels() const
 void ALSAStreamOps::close()
 {
     LOGD("close");
-    mParent->mVoipMicMute = false;
-    mParent->mVoipStreamCount = 0;
+    if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
+       (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
+       mParent->mVoipMicMute = false;
+       mParent->mVoipStreamCount = 0;
+    }
     mParent->mALSADevice->close(mHandle);
 }
 
