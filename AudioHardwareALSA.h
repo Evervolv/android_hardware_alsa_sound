@@ -86,6 +86,8 @@ class AudioHardwareALSA;
 #define TTY_HCO         0x00000080
 #define TTY_CLEAR       0xFFFFFF0F
 
+#define DEVICE_SPEAKER_HEADSET 0x6
+
 struct alsa_device_t;
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
