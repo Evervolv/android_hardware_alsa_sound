@@ -814,10 +814,10 @@ void AudioPolicyManager::setOutputDevice(audio_io_handle_t output, uint32_t devi
         if((mLPADecodeOutput != -1 && output == mLPADecodeOutput &&
             mOutputs.valueFor(mLPADecodeOutput)->isUsedByStrategy(STRATEGY_MEDIA))) {
             checkAndSetVolume(AudioSystem::MUSIC, mStreams[AudioSystem::MUSIC].mIndexCur, mLPADecodeOutput, device, delayMs, force);
-            usleep(75*1000);
+            usleep(150*1000);
         } else {
             checkAndSetVolume(AudioSystem::MUSIC, mStreams[AudioSystem::MUSIC].mIndexCur, output, device, delayMs, force);
-            usleep(outputDesc->mLatency*3*1000);
+            usleep(outputDesc->mLatency*6*1000);
         }
     }
 
