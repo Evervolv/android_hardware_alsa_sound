@@ -254,7 +254,6 @@ status_t AudioStreamInALSA::standby()
 
 void AudioStreamInALSA::resetFramesLost()
 {
-    Mutex::Autolock autoLock(mParent->mLock);
     mFramesLost = 0;
 }
 
