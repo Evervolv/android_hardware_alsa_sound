@@ -297,17 +297,23 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         }
     }
 
-    if ((handle->handle) && (devices == DEVICE_SPEAKER_HEADSET) &&
-       ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI)) ||
-       (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+    rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
+    txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
+
+    if ((handle->handle) && (((!strncmp(rxDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
+        ((!strncmp(curRxUCMDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
+        (!strncmp(curRxUCMDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))) ||
+        (((!strncmp(curRxUCMDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
+        ((!strncmp(rxDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
+        (!strncmp(rxDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))))) &&
+        ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI, strlen(SND_USE_CASE_VERB_HIFI))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, strlen(SND_USE_CASE_MOD_PLAY_MUSIC))))) {
         pcm_close(handle->handle);
         handle->handle=NULL;
         handle->rxHandle=NULL;
         pflag = true;
     }
 
-    rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
-    txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
     if ((rxDevice != NULL) && (txDevice != NULL)) {
         if (((strcmp(rxDevice, curRxUCMDevice)) || (strcmp(txDevice, curTxUCMDevice))) &&
             (mode == AudioSystem::MODE_IN_CALL))
@@ -348,9 +354,14 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         free(txDevice);
     }
 
-    if (pflag && (devices == DEVICE_SPEAKER_HEADSET) &&
-       ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI)) ||
-       (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+    if (pflag && (((!strncmp(rxDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
+        ((!strncmp(curRxUCMDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
+        (!strncmp(curRxUCMDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))) ||
+        (((!strncmp(curRxUCMDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
+        ((!strncmp(rxDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
+        (!strncmp(rxDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))))) &&
+        ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI, strlen(SND_USE_CASE_VERB_HIFI))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, strlen(SND_USE_CASE_MOD_PLAY_MUSIC))))) {
         s_open(handle);
         pflag = false;
     }
