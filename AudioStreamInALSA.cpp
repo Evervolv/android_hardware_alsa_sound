@@ -235,6 +235,8 @@ status_t AudioStreamInALSA::close()
 
 status_t AudioStreamInALSA::standby()
 {
+    Mutex::Autolock autoLock(mParent->mLock);
+
     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
         (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
          return NO_ERROR;
