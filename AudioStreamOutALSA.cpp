@@ -91,6 +91,12 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 
         return status;
     }
+    else if(!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+            sizeof(mHandle->useCase)) || !strncmp(mHandle->useCase,
+            SND_USE_CASE_MOD_PLAY_VOIP, sizeof(mHandle->useCase))) {
+        LOGV("Avoid Software volume by returning success\n");
+        return status;
+    }
     return INVALID_OPERATION;
 }
 
