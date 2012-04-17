@@ -171,17 +171,22 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
 
 status_t  AudioHardwareALSA::setFmVolume(float value)
 {
+
     status_t status = NO_ERROR;
 
-    int vol = android::AudioSystem::logToLinear( (value?(value+0.005):value) );
+    int vol;
 
-    if (vol > 100)
-        vol = 100;
-    else if (vol < 0)
-        vol = 0;
+    if (value < 0.0) {
+        LOGW("setFmVolume(%f) under 0.0, assuming 0.0\n", value);
+        value = 0.0;
+    } else if (value > 1.0) {
+        LOGW("setFmVolume(%f) over 1.0, assuming 1.0\n", value);
+        value = 1.0;
+    }
+    vol  = lrint((value * 0x2000) + 0.5);
 
     LOGD("setFmVolume(%f)\n", value);
-    LOGD("Setting FM volume to %d (available range is 0 to 100)\n", vol);
+    LOGD("Setting FM volume to %d (available range is 0 to 0x2000)\n", vol);
 
     mALSADevice->setFmVolume(vol);
 
