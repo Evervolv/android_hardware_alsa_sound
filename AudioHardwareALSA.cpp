@@ -318,6 +318,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
+#ifdef FM_RADIO
     key = String8(AudioParameter::keyHandleFm);
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore if device is 0
@@ -326,6 +327,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
+#endif
     if (param.size()) {
         status = BAD_VALUE;
     }

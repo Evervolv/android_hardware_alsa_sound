@@ -184,6 +184,7 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
+#ifdef FM_RADIO
     else {
         key = String8(AudioParameter::keyHandleFm);
         if (param.getInt(key, device) == NO_ERROR) {
@@ -195,6 +196,7 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
             param.remove(key);
         }
     }
+#endif
 
     return NO_ERROR;
 }
