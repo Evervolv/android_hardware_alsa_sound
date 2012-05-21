@@ -84,9 +84,9 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
             LOGW("AudioSessionOutMSM7xxx::setVolume(%f) over 1.0, assuming 1.0\n", volume);
             volume = 1.0;
         }
-        lpa_vol = lrint((volume * 0x2000)+0.5);
+        lpa_vol = sqrt(volume) * 100;
         LOGD("setLpaVolume(%f)\n", volume);
-        LOGD("Setting LPA volume to %d (available range is 0 to 0x2000)\n", lpa_vol);
+        LOGD("Setting LPA volume to %d (available range is 0 to 100)\n", lpa_vol);
         mHandle->module->setLpaVolume(lpa_vol);
 
         return status;
